@@ -86,8 +86,7 @@ impl Os<
         let disk = DiskBios::new(u8::try_from(self.boot_disk).unwrap(), self.thunk13);
 
         //TODO: get block from partition table
-        let block = 2 * crate::MIBI as u64 / redoxfs::BLOCK_SIZE;
-        redoxfs::FileSystem::open(disk, password_opt, Some(block), false)
+        redoxfs::FileSystem::open(disk, password_opt, None, false)
     }
 
     fn video_outputs(&self) -> usize {
@@ -152,7 +151,8 @@ impl Os<
     }
 
     fn clear_text(&self) {
-        //TODO: clear screen for VGA
+        let mut vga = VGA.lock();
+        vga.clear();
     }
 
     fn get_text_position(&self) -> (usize, usize) {

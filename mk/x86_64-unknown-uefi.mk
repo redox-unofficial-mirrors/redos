@@ -31,8 +31,8 @@ $(BUILD)/bootloader-live.efi: Cargo.lock Cargo.toml $(shell find src -type f)
 $(BUILD)/esp.bin: $(BUILD)/bootloader.efi
 	mkdir -p $(BUILD)
 	rm -f $@.partial
-	fallocate -l 64MiB $@.partial
-	mkfs.vfat -F 32 $@.partial
+	fallocate -l 2MiB $@.partial
+	mkfs.vfat $@.partial
 	mmd -i $@.partial efi
 	mmd -i $@.partial efi/boot
 	mcopy -i $@.partial $< ::efi/boot/bootx64.efi
@@ -41,13 +41,13 @@ $(BUILD)/esp.bin: $(BUILD)/bootloader.efi
 $(BUILD)/harddrive.bin: $(BUILD)/esp.bin $(BUILD)/filesystem.bin
 	mkdir -p $(BUILD)
 	rm -f $@.partial
-	fallocate -l 320MiB $@.partial
+	fallocate -l 1027MiB $@.partial
 	$(PARTED) -s -a minimal $@.partial mklabel gpt
-	$(PARTED) -s -a minimal $@.partial mkpart ESP FAT32 1MiB 65MiB
-	$(PARTED) -s -a minimal $@.partial mkpart REDOXFS 65MiB 100%
-	$(PARTED) -s -a minimal $@.partial toggle 1 boot
+	$(PARTED) -s -a minimal $@.partial mkpart ESP FAT32 1MiB 2MiB
+	$(PARTED) -s -a minimal $@.partial mkpart REDOXFS 2MiB 1026MiB
+	$(PARTED) -s -a minimal $@.partial set 2 boot on
 	dd if=$(BUILD)/esp.bin of=$@.partial bs=1MiB seek=1 conv=notrunc
-	dd if=$(BUILD)/filesystem.bin of=$@.partial bs=1MiB seek=65 conv=notrunc
+	dd if=$(BUILD)/filesystem.bin of=$@.partial bs=1MiB seek=2 conv=notrunc
 	mv $@.partial $@
 
 $(BUILD)/firmware.rom:

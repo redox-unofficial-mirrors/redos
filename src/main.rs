@@ -38,6 +38,9 @@ mod arch;
 mod logger;
 mod serial_16550;
 
+#[cfg(feature = "dos")]
+mod dos;
+
 const KIBI: usize = 1024;
 const MIBI: usize = KIBI * KIBI;
 
@@ -388,6 +391,9 @@ fn main<
     }
     println!(": {} MiB", fs.header.size() / MIBI as u64);
     println!();
+
+    #[cfg(feature = "dos")]
+    dos::main(os, &mut fs);
 
     let mut mode_opts = Vec::new();
     for output_i in 0..os.video_outputs() {

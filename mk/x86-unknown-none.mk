@@ -53,24 +53,23 @@ $(BUILD)/bootloader-live.bin: $(BUILD)/bootloader-live.elf $(shell find asm/$(TA
 $(BUILD)/harddrive.bin: $(BUILD)/bootloader.bin $(BUILD)/filesystem.bin
 	mkdir -p $(BUILD)
 	rm -f $@.partial
-	fallocate -l 256MiB $@.partial
+	fallocate -l 1027MiB $@.partial
 	$(PARTED) -s -a minimal $@.partial mklabel msdos
-	$(PARTED) -s -a minimal $@.partial mkpart primary 1MiB 100%
+	$(PARTED) -s -a minimal $@.partial mkpart primary 2MiB 1026MiB
 	dd if=$< of=$@.partial bs=1 count=446 conv=notrunc
 	dd if=$< of=$@.partial bs=512 skip=1 seek=1 conv=notrunc
-	dd if=$(BUILD)/filesystem.bin of=$@.partial bs=1MiB seek=1 conv=notrunc
+	dd if=$(BUILD)/filesystem.bin of=$@.partial bs=1MiB seek=2 conv=notrunc
 	mv $@.partial $@
 
 qemu: $(BUILD)/harddrive.bin
 	$(QEMU) \
-		-d cpu_reset \
+		-d cpu_reset,guest_errors,int \
 		-no-reboot \
-		-smp 4 -m 2048 \
+		-smp 1 -m 8 \
 		-chardev stdio,id=debug,signal=off,mux=on \
 		-serial chardev:debug \
 		-mon chardev=debug \
-		-machine q35 \
+		-machine pc \
 		-net none \
-		-enable-kvm \
-		-cpu host \
+		-cpu 486 \
 		-drive file=$<,format=raw

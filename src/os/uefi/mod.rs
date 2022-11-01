@@ -182,8 +182,7 @@ impl Os<
                 }
             } else {
                 //TODO: get block from partition table
-                let block = 2 * crate::MIBI as u64 / redoxfs::BLOCK_SIZE;
-                match redoxfs::FileSystem::open(block_io, password_opt, Some(block), false) {
+                match redoxfs::FileSystem::open(block_io, password_opt, None, false) {
                     Ok(ok) => return Ok(ok),
                     Err(err) => match err.errno {
                         // Ignore header not found error

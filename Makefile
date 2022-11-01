@@ -11,12 +11,13 @@ $(BUILD)/filesystem:
 	mkdir -p $(BUILD)
 	rm -f $@.partial
 	mkdir $@.partial
-	fallocate -l 1MiB $@.partial/kernel
+	mkdir $@.partial/boot
+	fallocate -l 1MiB $@.partial/boot/kernel
+	echo "This is a test file" > $@.partial/test.txt
 	mv $@.partial $@
 
 $(BUILD)/filesystem.bin: $(BUILD)/filesystem
 	mkdir -p $(BUILD)
 	rm -f $@.partial
-	fallocate -l 255MiB $@.partial
 	redoxfs-ar $@.partial $<
 	mv $@.partial $@
