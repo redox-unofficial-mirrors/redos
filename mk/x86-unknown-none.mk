@@ -7,10 +7,10 @@ all: $(BUILD)/bootloader.bin
 
 $(BUILD)/libbootloader.a: Cargo.lock Cargo.toml $(shell find src -type f)
 	mkdir -p $(BUILD)
-	env RUSTFLAGS="-C soft-float" \
+	env RUSTFLAGS="-C lto=fat -C soft-float" \
 	cargo rustc \
-		-Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem \
+		-Z build-std=core,alloc,panic_abort \
+		-Z build-std-features=compiler-builtins-mem,panic_immediate_abort \
 		--target $(TARGET) \
 		--lib \
 		--release \
@@ -21,7 +21,7 @@ $(BUILD)/bootloader.elf: linkers/$(TARGET).ld $(BUILD)/libbootloader.a
 	mkdir -p $(BUILD)
 	$(LD) -m elf_i386 --gc-sections -z max-page-size=0x1000 -T $< -o $@ $(BUILD)/libbootloader.a && \
 	$(OBJCOPY) --only-keep-debug $@ $@.sym && \
-	$(OBJCOPY) --strip-debug $@
+	$(OBJCOPY) --strip-all $@
 
 $(BUILD)/bootloader.bin: $(BUILD)/bootloader.elf $(shell find asm/$(TARGET) -type f)
 	mkdir -p $(BUILD)
@@ -29,10 +29,10 @@ $(BUILD)/bootloader.bin: $(BUILD)/bootloader.elf $(shell find asm/$(TARGET) -typ
 
 $(BUILD)/libbootloader-live.a: Cargo.lock Cargo.toml $(shell find src -type f)
 	mkdir -p $(BUILD)
-	env RUSTFLAGS="-C soft-float" \
+	env RUSTFLAGS="-C lto=fat -C soft-float" \
 	cargo rustc \
-		-Z build-std=core,alloc \
-		-Z build-std-features=compiler-builtins-mem \
+		-Z build-std=core,alloc,panic_abort \
+		-Z build-std-features=compiler-builtins-mem,panic_immediate_abort \
 		--target $(TARGET) \
 		--lib \
 		--release \
@@ -44,7 +44,7 @@ $(BUILD)/bootloader-live.elf: linkers/$(TARGET).ld $(BUILD)/libbootloader-live.a
 	mkdir -p $(BUILD)
 	$(LD) -m elf_i386 --gc-sections -z max-page-size=0x1000 -T $< -o $@ $(BUILD)/libbootloader-live.a && \
 	$(OBJCOPY) --only-keep-debug $@ $@.sym && \
-	$(OBJCOPY) --strip-debug $@
+	$(OBJCOPY) --strip-all $@
 
 $(BUILD)/bootloader-live.bin: $(BUILD)/bootloader-live.elf $(shell find asm/$(TARGET) -type f)
 	mkdir -p $(BUILD)

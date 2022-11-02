@@ -45,12 +45,13 @@ x86 = "0.47.0"
 
 [features]
 default = ["dos"]
-dos = ["rhai"]
+dos = []
 live = []
 serial_debug = []
 
 [profile.release]
-#lto = true # breaks stuff
-opt-level = "z"
+debug = 2
+lto = "thin" # uefi cannot compile with fat lto
+opt-level = "s"
 panic = "abort"
-strip = true
+split-debuginfo = "packed"

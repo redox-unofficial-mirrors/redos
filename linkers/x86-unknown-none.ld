@@ -1,28 +1,30 @@
 ENTRY(start)
 OUTPUT_FORMAT(elf32-i386)
 
+/* The start address must match bootloader.asm */
+OFFSET = 0x13000;
+
 SECTIONS {
-    /* The start address must match bootloader.asm */
-    . = 0x13000;
+    . = OFFSET;
 
     . += SIZEOF_HEADERS;
     . = ALIGN(4096);
 
-    .text : {
+    .text : AT(ADDR(.text) - OFFSET) {
         __text_start = .;
         *(.text*)
         . = ALIGN(4096);
         __text_end = .;
     }
 
-    .rodata : {
+    .rodata : AT(ADDR(.rodata) - OFFSET) {
         __rodata_start = .;
         *(.rodata*)
         . = ALIGN(4096);
         __rodata_end = .;
     }
 
-    .data : {
+    .data : AT(ADDR(.data) - OFFSET) {
         __data_start = .;
         *(.data*)
         . = ALIGN(4096);
@@ -33,7 +35,7 @@ SECTIONS {
         __bss_end = .;
     }
 
-    .tdata : {
+    .tdata : AT(ADDR(.tdata) - OFFSET) {
         __tdata_start = .;
         *(.tdata*)
         . = ALIGN(4096);

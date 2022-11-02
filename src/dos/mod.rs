@@ -3,7 +3,6 @@ use alloc::{
     vec::Vec,
 };
 use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
-use rhai::Engine;
 use syscall::Error;
 
 use crate::{Os, OsKey, OsVideoMode};
@@ -17,10 +16,44 @@ fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<Tree
     Ok(node)
 }
 
+
+fn read_line<
+    D: Disk,
+    V: Iterator<Item=OsVideoMode>
+>(os: &mut dyn Os<D, V>) -> String {
+    let mut line = String::new();
+    loop {
+        // Print cursor
+        print!("_");
+
+        let key = os.get_key();
+
+        // Wipe out cursor
+        print!("\x08 \x08");
+
+        match key {
+            OsKey::Backspace | OsKey::Delete => if ! line.is_empty() {
+                print!("\x08 \x08");
+                line.pop();
+            },
+            OsKey::Char(c) => {
+                print!("{}", c);
+                line.push(c)
+            },
+            OsKey::Enter => {
+                break;
+            },
+            _ => (),
+        }
+    }
+    println!();
+    line
+}
+
 fn run<
     D: Disk,
     V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>, fs: &mut FileSystem<D>, engine: &rhai::Engine, cwd: &mut Vec<String>, line: &str) {
+>(os: &mut dyn Os<D, V>, fs: &mut FileSystem<D>, cwd: &mut Vec<String>, line: &str) {
     let mut args = line.split(' ')
         .filter(|x| !x.is_empty());
     let cmd = match args.next() {
@@ -207,6 +240,7 @@ fn run<
                 }
             }
         },
+        #[cfg(feature = "rhai")]
         "rhai" => {
             let arg = match args.next() {
                 Some(some) => some,
@@ -227,7 +261,7 @@ fn run<
                 path.push(part.to_string());
             }
 
-            match fs.tx(|mut tx| {
+            let script = match fs.tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if node.data().is_dir() {
                     return Err(Error::new(syscall::EISDIR));
@@ -246,16 +280,23 @@ fn run<
                 Ok(data)
             }) {
                 Ok(data) => match String::from_utf8(data) {
-                    Ok(string) => match engine.run(&string) {
-                        Ok(()) => (),
-                        Err(err) => {
-                            println!("{}: {}: {:?}", cmd, arg, err);
-                        }
-                    },
+                    Ok(string) => string,
                     Err(err) => {
                         println!("{}: {}: {:?}", cmd, arg, err);
+                        return;
                     }
                 },
+                Err(err) => {
+                    println!("{}: {}: {:?}", cmd, arg, err);
+                    return;
+                }
+            };
+
+            let mut engine = rhai::Engine::new();
+            engine.on_print(|string| println!("{}", string));
+
+            match engine.run(&string) {
+                Ok(()) => (),
                 Err(err) => {
                     println!("{}: {}: {:?}", cmd, arg, err);
                 }
@@ -401,12 +442,9 @@ pub(crate) fn main<
 >(os: &mut dyn Os<D, V>, fs: &mut FileSystem<D>) {
     println!("Welcome to ReDOS");
 
-    let mut engine = rhai::Engine::new();
-    engine.on_print(|string| println!("{}", string));
-
     let mut cwd = Vec::<String>::new();
 
-    run(os, fs, &engine, &mut cwd, "rhai redos/autoexec.rhai");
+    run(os, fs, &mut cwd, "rhai redos/autoexec.rhai");
 
     loop {
         print!("/");
@@ -418,34 +456,8 @@ pub(crate) fn main<
         }
         print!("> ");
 
-        let mut line = String::new();
-        loop {
-            // Print cursor
-            print!("_");
+        let line = read_line(os);
 
-            let key = os.get_key();
-
-            // Wipe out cursor
-            print!("\x08 \x08");
-
-            match key {
-                OsKey::Backspace | OsKey::Delete => if ! line.is_empty() {
-                    print!("\x08 \x08");
-                    line.pop();
-                },
-                OsKey::Char(c) => {
-                    print!("{}", c);
-                    line.push(c)
-                },
-                OsKey::Enter => {
-                    break;
-                },
-                _ => (),
-            }
-        }
-
-        println!();
-
-        run(os, fs, &engine, &mut cwd, &line);
+        run(os, fs, &mut cwd, &line);
     }
 }
