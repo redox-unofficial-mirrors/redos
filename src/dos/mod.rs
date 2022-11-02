@@ -1,4 +1,3 @@
-
 use alloc::{
     boxed::Box,
     string::{String, ToString},
@@ -70,13 +69,13 @@ fn read_line<
     loop {
         // Print cursor
         os.set_text_highlight(true);
-        print!(" ");
+        print!(" \x08");
         os.set_text_highlight(false);
 
         let key = os.get_key();
 
         // Wipe out cursor
-        print!("\x08 \x08");
+        print!(" \x08");
 
         match key {
             OsKey::Backspace | OsKey::Delete => if ! line.is_empty() {
@@ -96,11 +95,6 @@ fn read_line<
     line
 }
 
-struct File {
-    id: u32,
-    offset: u64,
-}
-
 struct State<
     D: Disk + 'static,
     V: Iterator<Item=OsVideoMode> + 'static,
@@ -109,7 +103,6 @@ struct State<
     os: O,
     fs: FileSystem<D>,
     cwd: Vec<String>,
-    files: Vec<Option<File>>,
     phantom: PhantomData<V>,
 }
 
@@ -432,7 +425,6 @@ fn run<
                 }
             }
         },
-        #[cfg(feature = "rhai")]
         "rhai" => {
             let path_opt = args.next();
             return run_rhai(state, path_opt, args);
@@ -565,14 +557,9 @@ fn run<
                 }
             }
         },
-        #[cfg(feature = "rhai")]
         _ => {
             let path = format!("/redos/{}.rhai", cmd);
             return run_rhai(state, Some(&path), args);
-        },
-        #[cfg(not(feature = "rhai"))]
-        _ => {
-            println!("{}: command not found", cmd);
         },
     }
 }
@@ -592,7 +579,6 @@ pub(crate) fn main<
             os,
             fs,
             cwd: Vec::new(),
-            files: Vec::new(),
             phantom: PhantomData,
         }
     ));
@@ -607,7 +593,7 @@ pub(crate) fn main<
             }
             print!("{}", part);
         }
-        print!("> ");
+        print!("# ");
         let line = read_line(&mut state.lock().os);
         println!();
 

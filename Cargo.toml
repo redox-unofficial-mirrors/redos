@@ -54,8 +54,8 @@ redox_uefi_std = "0.1.7"
 x86 = "0.47.0"
 
 [features]
-default = ["dos", "rhai"]
-dos = []
+default = ["dos"]
+dos = ["rhai"]
 live = []
 serial_debug = []
 

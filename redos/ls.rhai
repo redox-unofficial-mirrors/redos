@@ -12,7 +12,9 @@ for arg in args {
     if args.len() > 1 {
         print(`${arg}:`)
     }
-    for entry in readdir(open(arg)) {
+    let entries = readdir(open(arg));
+    entries.sort();
+    for entry in entries {
         print(`${entry}`)
     }
 }
