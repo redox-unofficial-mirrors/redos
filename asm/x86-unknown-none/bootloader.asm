@@ -27,5 +27,5 @@ stage3:
     align 512, db 0
 .end:
 
-; the maximum size of the boot loader portion is 384 KiB
-times (384*1024)-($-$$) db 0
+; the maximum size of the boot loader portion is 1024 KiB
+times (1024*1024)-($-$$) db 0

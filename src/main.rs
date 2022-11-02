@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(associated_type_defaults)]
 #![feature(lang_items)]
 #![cfg_attr(
     target_os = "uefi",
@@ -376,7 +377,7 @@ fn elf_entry(data: &[u8]) -> (u64, bool) {
 #[cfg(feature = "dos")]
 fn main<
     D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode>,
+    V: Iterator<Item=OsVideoMode> + 'static,
     O: Os<D, V> + 'static,
 >(mut os: O) -> (usize, u64, KernelArgs) {
     println!("Redox OS Bootloader {} on {}", env!("CARGO_PKG_VERSION"), os.name());

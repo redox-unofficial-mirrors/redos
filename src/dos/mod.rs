@@ -5,11 +5,16 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
+use core::marker::PhantomData;
 use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
 use spin::Mutex;
 use syscall::Error;
 
 use crate::{Os, OsKey, OsVideoMode};
+
+fn rhai_err<E: ToString>(err: E) -> Box<rhai::EvalAltResult> {
+    err.to_string().into()
+}
 
 fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<TreeData<Node>, Error> {
     let mut node = tx.read_tree(TreePtr::root())?;
@@ -21,6 +26,10 @@ fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<Tree
 }
 
 fn read_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Result<Vec<u8>, Error> {
+    if node.data().is_dir() {
+        return Err(Error::new(syscall::EISDIR));
+    }
+
     let size = {
         let size = node.data().size();
         if size > 1024 * 1024 {
@@ -41,6 +50,16 @@ fn read_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Result<
         offset += count;
     }
     Err(Error::new(syscall::EFBIG))
+}
+
+fn readdir_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Result<Vec<redoxfs::DirEntry>, Error> {
+    if ! node.data().is_dir() {
+        return Err(Error::new(syscall::ENOTDIR));
+    }
+
+    let mut children = Vec::new();
+    tx.child_nodes(node.ptr(), &mut children)?;
+    Ok(children)
 }
 
 fn read_line<
@@ -77,6 +96,52 @@ fn read_line<
     line
 }
 
+struct File {
+    id: u32,
+    offset: u64,
+}
+
+struct State<
+    D: Disk + 'static,
+    V: Iterator<Item=OsVideoMode> + 'static,
+    O: Os<D, V> + 'static,
+> {
+    os: O,
+    fs: FileSystem<D>,
+    cwd: Vec<String>,
+    files: Vec<Option<File>>,
+    phantom: PhantomData<V>,
+}
+
+impl<
+    D: Disk + 'static,
+    V: Iterator<Item=OsVideoMode> + 'static,
+    O: Os<D, V> + 'static,
+> State<D, V, O> {
+    fn open(&mut self, path: &str) -> Result<u32, Error> {
+        let mut path_parts = if path.starts_with("/") {
+            Vec::new()
+        } else {
+            self.cwd.clone()
+        };
+        for part in path.split("/").filter(|x| !x.is_empty()) {
+            if part == "." {
+                // Ignore, refers to current dir
+            } else if part == ".." {
+                // Parent directory
+                path_parts.pop();
+            } else {
+                // Normal path component
+                path_parts.push(part.to_string());
+            }
+        }
+        self.fs.tx(move |mut tx| {
+            let node = lookup_node(&mut tx, &path_parts)?;
+            Ok(node.ptr().id())
+        })
+    }
+}
+
 fn run_rhai<
     'i,
     D: Disk + 'static,
@@ -84,40 +149,40 @@ fn run_rhai<
     O: Os<D, V> + 'static,
     I: Iterator<Item=&'i str>,
 >(
-    os: &Arc<Mutex<O>>,
-    fs: &Arc<Mutex<FileSystem<D>>>,
-    cwd: &mut Vec<String>,
-    path: &str,
+    state: &Arc<Mutex<State<D, V, O>>>,
+    path_opt: Option<&str>,
     args: I
 ) {
-    let mut path_parts = if path.starts_with("/") {
-        Vec::new()
-    } else {
-        cwd.clone()
-    };
-    for part in path.split("/").filter(|x| !x.is_empty()) {
-        path_parts.push(part.to_string());
-    }
-
-    let script = match fs.lock().tx(|mut tx| {
-        let node = lookup_node(&mut tx, &path_parts)?;
-        if node.data().is_dir() {
-            return Err(Error::new(syscall::EISDIR));
+    let script_opt: Option<(&str, String)> = if let Some(path) = path_opt {
+        let mut path_parts = if path.starts_with("/") {
+            Vec::new()
+        } else {
+            state.lock().cwd.clone()
+        };
+        for part in path.split("/").filter(|x| !x.is_empty()) {
+            path_parts.push(part.to_string());
         }
 
-        read_node(&mut tx, &node)
-    }) {
-        Ok(ok) => match String::from_utf8(ok) {
+        let data = match state.lock().fs.tx(|mut tx| {
+            let node = lookup_node(&mut tx, &path_parts)?;
+            read_node(&mut tx, &node)
+        }) {
             Ok(ok) => ok,
             Err(err) => {
                 println!("{}: {:?}", path, err);
                 return;
             }
-        },
-        Err(err) => {
-            println!("{}: {:?}", path, err);
-            return;
+        };
+            
+        match String::from_utf8(data) {
+            Ok(ok) => Some((path, ok)),
+            Err(err) => {
+                println!("{}: {:?}", path, err);
+                return;
+            }
         }
+    } else {
+        None
     };
 
     let mut engine = rhai::Engine::new();
@@ -127,47 +192,71 @@ fn run_rhai<
     });
 
     {
-        let fs = fs.clone();
-        engine.register_fn("open", move |path: &str| -> Result<u32, Box<rhai::EvalAltResult>> {
-            let path_parts: Vec<String> = path
-                .split("/")
-                .filter(|x| !x.is_empty())
-                .map(|x| x.to_string())
-                .collect();
-            match fs.lock().tx(move |mut tx| {
-                lookup_node(&mut tx, &path_parts)
-            }) {
-                Ok(node) => Ok(node.ptr().id()),
-                Err(err) => Err(format!("{}", err).into())
-            }
+        let state = state.clone();
+        engine.register_fn("clear", move || {
+            state.lock().os.clear_text();
         });
     }
 
     {
-        let fs = fs.clone();
-        engine.register_fn("read", move |fd: u32| -> Result<String, Box<rhai::EvalAltResult>> {
-            match fs.lock().tx(move |mut tx| {
-                let node = tx.read_tree(TreePtr::new(fd))?;
-                read_node(&mut tx, &node)
-            }) {
-                Ok(data) => match String::from_utf8(data) {
-                    Ok(ok) => Ok(ok),
-                    Err(err) => Err(format!("{}", err).into())
-                },
-                Err(err) => Err(format!("{}", err).into())
-            }
-        });
-    }
-
-    {
-        let os = os.clone();
+        let state = state.clone();
         engine.register_fn("prompt", move |prompt: &str| -> String {
             print!("{}", prompt);
-            let line = read_line(&mut *os.lock());
+            let line = read_line(&mut state.lock().os);
             for c in prompt.chars().chain(line.chars()) {
                 print!("\x08 \x08");
             }
             line
+        });
+    }
+
+    {
+        let state = state.clone();
+        engine.register_fn("cwd", move || -> String {
+            let mut string = "/".to_string();
+            for (i, part) in state.lock().cwd.iter().enumerate() {
+                if i > 0 {
+                    string.push('/');
+                }
+                string.push_str(part);
+            }
+            string
+        });
+    }
+
+    {
+        let state = state.clone();
+        engine.register_fn("open", move |path: &str| -> Result<u32, Box<rhai::EvalAltResult>> {
+            state.lock().open(path).map_err(rhai_err)
+        });
+    }
+
+    {
+        let state = state.clone();
+        engine.register_fn("read", move |fd: u32| -> Result<String, Box<rhai::EvalAltResult>> {
+            let data = state.lock().fs.tx(move |mut tx| {
+                let node = tx.read_tree(TreePtr::new(fd))?;
+                read_node(&mut tx, &node)
+            }).map_err(rhai_err)?;
+            String::from_utf8(data).map_err(rhai_err)
+        });
+    }
+
+    {
+        let state = state.clone();
+        engine.register_fn("readdir", move |fd: u32| -> Result<rhai::Array, Box<rhai::EvalAltResult>> {
+            let children = state.lock().fs.tx(move |mut tx| {
+                let node = tx.read_tree(TreePtr::new(fd))?;
+                readdir_node(&mut tx, &node)
+            }).map_err(rhai_err)?;
+
+            let mut array = rhai::Array::new();
+            for child in children {
+                if let Some(name) = child.name() {
+                    array.push(name.into());
+                }
+            }
+            Ok(array)
         });
     }
 
@@ -176,10 +265,29 @@ fn run_rhai<
     let args_rhai: rhai::Array = args.map(|x| x.into()).collect();
     scope.push("args", args_rhai);
 
-    match engine.run_with_scope(&mut scope, &script) {
-        Ok(()) => (),
-        Err(err) => {
-            println!("{}: {:?}", path, err);
+    if let Some((path, script)) = script_opt {
+        match engine.run_with_scope(&mut scope, &script) {
+            Ok(()) => (),
+            Err(err) => {
+                println!("{}: {:?}", path, err);
+            }
+        }
+    } else {
+        loop {
+            print!(">> ");
+            let line = read_line(&mut state.lock().os);
+            println!();
+
+            if line.as_str() == "exit" {
+                break;
+            }
+
+            match engine.run_with_scope(&mut scope, &line) {
+                Ok(()) => (),
+                Err(err) => {
+                    println!("{:?}", err);
+                }
+            }
         }
     }
 }
@@ -189,9 +297,7 @@ fn run<
     V: Iterator<Item=OsVideoMode>,
     O: Os<D, V> + 'static,
 >(
-    os: &Arc<Mutex<O>>,
-    fs: &Arc<Mutex<FileSystem<D>>>,
-    cwd: &mut Vec<String>,
+    state: &Arc<Mutex<State<D, V, O>>>,
     line: &str
 ) {
     let mut args = line.split(' ')
@@ -216,13 +322,13 @@ fn run<
             let mut path = if arg.starts_with("/") {
                 Vec::new()
             } else {
-                cwd.clone()
+                state.lock().cwd.clone()
             };
             for part in arg.split("/").filter(|x| !x.is_empty()) {
                 path.push(part.to_string());
             }
 
-            let string = match fs.lock().tx(|mut tx| {
+            let string = match state.lock().fs.tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if node.data().is_dir() {
                     return Err(Error::new(syscall::EISDIR));
@@ -244,54 +350,7 @@ fn run<
             };
 
             for line in string.lines() {
-                run(os, fs, cwd, line);
-            }
-        },
-        "cat" | "type" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                None => ""
-            };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
-
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-
-            match fs.lock().tx(|mut tx| {
-                let node = lookup_node(&mut tx, &path)?;
-                if node.data().is_dir() {
-                    return Err(Error::new(syscall::EISDIR));
-                }
-
-                let mut offset = 0;
-                let mut block = [0; redoxfs::BLOCK_SIZE as usize];
-                loop {
-                    let count = tx.read_node_inner(&node, offset, &mut block)?;
-                    if count == 0 {
-                        break;
-                    }
-                    offset += count as u64;
-
-                    for i in 0..count {
-                        print!("{}", block[i] as char);
-                    }
-                }
-                Ok(())
-            }) {
-                Ok(()) => (),
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
-                }
+                run(state, line);
             }
         },
         "cd" => {
@@ -307,13 +366,14 @@ fn run<
             let mut path = if arg.starts_with("/") {
                 Vec::new()
             } else {
-                cwd.clone()
+                state.lock().cwd.clone()
             };
             for part in arg.split("/").filter(|x| !x.is_empty()) {
                 path.push(part.to_string());
             }
 
-            match fs.lock().tx(|mut tx| {
+            let mut state = state.lock();
+            match state.fs.tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if ! node.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -321,61 +381,8 @@ fn run<
                 Ok(())
             }) {
                 Ok(()) => {
-                    *cwd = path;
+                    state.cwd = path;
                 },
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
-                }
-            }
-        },
-        "clear" | "cls" => {
-            os.lock().clear_text();
-        },
-        "echo" => {
-            for (i, arg) in args.enumerate() {
-                if i > 0 {
-                    print!(" ");
-                }
-                print!("{}", arg);
-            }
-            println!()
-        },
-        "ls" | "dir" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                None => ""
-            };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
-
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-
-            match fs.lock().tx(|mut tx| {
-                let node = lookup_node(&mut tx, &path)?;
-                if ! node.data().is_dir() {
-                    return Err(Error::new(syscall::ENOTDIR));
-                }
-
-                let mut children = Vec::new();
-                tx.child_nodes(node.ptr(), &mut children)?;
-                for entry in children {
-                    if let Some(name) = entry.name() {
-                        println!("{}", name);
-                    }
-                }
-                Ok(())
-            }) {
-                Ok(()) => (),
                 Err(err) => {
                     println!("{}: {}: {:?}", cmd, arg, err);
                 }
@@ -395,7 +402,7 @@ fn run<
             let mut path = if arg.starts_with("/") {
                 Vec::new()
             } else {
-                cwd.clone()
+                state.lock().cwd.clone()
             };
             for part in arg.split("/").filter(|x| !x.is_empty()) {
                 path.push(part.to_string());
@@ -408,7 +415,7 @@ fn run<
                 }
             };
 
-            match fs.lock().tx(|mut tx| {
+            match state.lock().fs.tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -427,15 +434,8 @@ fn run<
         },
         #[cfg(feature = "rhai")]
         "rhai" => {
-            match args.next() {
-                Some(path) => {
-                    run_rhai(os, fs, cwd, path, args);
-                },
-                //TODO: repl?
-                None => {
-                    println!("{}: no argument specified", cmd);
-                }
-            }
+            let path_opt = args.next();
+            return run_rhai(state, path_opt, args);
         },
         "rm" | "del" => {
             let arg = match args.next() {
@@ -451,7 +451,7 @@ fn run<
             let mut path = if arg.starts_with("/") {
                 Vec::new()
             } else {
-                cwd.clone()
+                state.lock().cwd.clone()
             };
             for part in arg.split("/").filter(|x| !x.is_empty()) {
                 path.push(part.to_string());
@@ -464,7 +464,7 @@ fn run<
                 }
             };
 
-            match fs.lock().tx(|mut tx| {
+            match state.lock().fs.tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -493,7 +493,7 @@ fn run<
             let mut path = if arg.starts_with("/") {
                 Vec::new()
             } else {
-                cwd.clone()
+                state.lock().cwd.clone()
             };
             for part in arg.split("/").filter(|x| !x.is_empty()) {
                 path.push(part.to_string());
@@ -506,7 +506,7 @@ fn run<
                 }
             };
 
-            match fs.lock().tx(|mut tx| {
+            match state.lock().fs.tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -535,7 +535,7 @@ fn run<
             let mut path = if arg.starts_with("/") {
                 Vec::new()
             } else {
-                cwd.clone()
+                state.lock().cwd.clone()
             };
             for part in arg.split("/").filter(|x| !x.is_empty()) {
                 path.push(part.to_string());
@@ -548,7 +548,7 @@ fn run<
                 }
             };
 
-            match fs.lock().tx(|mut tx| {
+            match state.lock().fs.tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -567,7 +567,8 @@ fn run<
         },
         #[cfg(feature = "rhai")]
         _ => {
-            run_rhai(os, fs, cwd, &format!("/redos/{}.rhai", cmd), args);
+            let path = format!("/redos/{}.rhai", cmd);
+            return run_rhai(state, Some(&path), args);
         },
         #[cfg(not(feature = "rhai"))]
         _ => {
@@ -578,7 +579,7 @@ fn run<
 
 pub(crate) fn main<
     D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode>,
+    V: Iterator<Item=OsVideoMode> + 'static,
     O: Os<D, V> + 'static,
 >(
     os: O,
@@ -586,26 +587,30 @@ pub(crate) fn main<
 ) -> ! {
     println!("Welcome to ReDOS");
 
-    let os = Arc::new(Mutex::new(os));
+    let state = Arc::new(Mutex::new(
+        State {
+            os,
+            fs,
+            cwd: Vec::new(),
+            files: Vec::new(),
+            phantom: PhantomData,
+        }
+    ));
 
-    let fs = Arc::new(Mutex::new(fs));
-
-    let mut cwd = Vec::<String>::new();
-
-    run(&os, &fs, &mut cwd, "call redos/autoexec");
+    run(&state, "call redos/autoexec");
 
     loop {
         print!("/");
-        for (i, part) in cwd.iter().enumerate() {
+        for (i, part) in state.lock().cwd.iter().enumerate() {
             if i > 0 {
                 print!("/");
             }
             print!("{}", part);
         }
         print!("> ");
-        let line = read_line(&mut *os.lock());
+        let line = read_line(&mut state.lock().os);
         println!();
 
-        run(&os, &fs, &mut cwd, &line);
+        run(&state, &line);
     }
 }

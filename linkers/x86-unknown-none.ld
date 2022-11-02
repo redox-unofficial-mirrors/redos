@@ -2,7 +2,7 @@ ENTRY(start)
 OUTPUT_FORMAT(elf32-i386)
 
 /* The start address must match bootloader.asm */
-OFFSET = 0x13000;
+OFFSET = 0x100000;
 
 SECTIONS {
     . = OFFSET;

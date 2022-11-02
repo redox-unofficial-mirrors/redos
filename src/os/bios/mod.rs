@@ -235,7 +235,7 @@ pub unsafe extern "C" fn start(
 
     ALLOCATOR.lock().init(heap_start, heap_size);
 
-    let (page_phys, func, args) = crate::main(&mut os);
+    let (page_phys, func, args) = crate::main(os);
 
     kernel_entry(
         page_phys,
