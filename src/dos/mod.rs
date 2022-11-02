@@ -1,3 +1,4 @@
+
 use alloc::{
     boxed::Box,
     string::{String, ToString},
@@ -49,7 +50,9 @@ fn read_line<
     let mut line = String::new();
     loop {
         // Print cursor
-        print!("_");
+        os.set_text_highlight(true);
+        print!(" ");
+        os.set_text_highlight(false);
 
         let key = os.get_key();
 
@@ -71,14 +74,126 @@ fn read_line<
             _ => (),
         }
     }
-    println!();
     line
+}
+
+fn run_rhai<
+    'i,
+    D: Disk + 'static,
+    V: Iterator<Item=OsVideoMode>,
+    O: Os<D, V> + 'static,
+    I: Iterator<Item=&'i str>,
+>(
+    os: &Arc<Mutex<O>>,
+    fs: &Arc<Mutex<FileSystem<D>>>,
+    cwd: &mut Vec<String>,
+    path: &str,
+    args: I
+) {
+    let mut path_parts = if path.starts_with("/") {
+        Vec::new()
+    } else {
+        cwd.clone()
+    };
+    for part in path.split("/").filter(|x| !x.is_empty()) {
+        path_parts.push(part.to_string());
+    }
+
+    let script = match fs.lock().tx(|mut tx| {
+        let node = lookup_node(&mut tx, &path_parts)?;
+        if node.data().is_dir() {
+            return Err(Error::new(syscall::EISDIR));
+        }
+
+        read_node(&mut tx, &node)
+    }) {
+        Ok(ok) => match String::from_utf8(ok) {
+            Ok(ok) => ok,
+            Err(err) => {
+                println!("{}: {:?}", path, err);
+                return;
+            }
+        },
+        Err(err) => {
+            println!("{}: {:?}", path, err);
+            return;
+        }
+    };
+
+    let mut engine = rhai::Engine::new();
+    engine.on_print(|string| println!("{}", string));
+    engine.on_debug(|string, src, pos| {
+        println!("debug {:?} at {:?}: {}", src, pos, string)
+    });
+
+    {
+        let fs = fs.clone();
+        engine.register_fn("open", move |path: &str| -> Result<u32, Box<rhai::EvalAltResult>> {
+            let path_parts: Vec<String> = path
+                .split("/")
+                .filter(|x| !x.is_empty())
+                .map(|x| x.to_string())
+                .collect();
+            match fs.lock().tx(move |mut tx| {
+                lookup_node(&mut tx, &path_parts)
+            }) {
+                Ok(node) => Ok(node.ptr().id()),
+                Err(err) => Err(format!("{}", err).into())
+            }
+        });
+    }
+
+    {
+        let fs = fs.clone();
+        engine.register_fn("read", move |fd: u32| -> Result<String, Box<rhai::EvalAltResult>> {
+            match fs.lock().tx(move |mut tx| {
+                let node = tx.read_tree(TreePtr::new(fd))?;
+                read_node(&mut tx, &node)
+            }) {
+                Ok(data) => match String::from_utf8(data) {
+                    Ok(ok) => Ok(ok),
+                    Err(err) => Err(format!("{}", err).into())
+                },
+                Err(err) => Err(format!("{}", err).into())
+            }
+        });
+    }
+
+    {
+        let os = os.clone();
+        engine.register_fn("prompt", move |prompt: &str| -> String {
+            print!("{}", prompt);
+            let line = read_line(&mut *os.lock());
+            for c in prompt.chars().chain(line.chars()) {
+                print!("\x08 \x08");
+            }
+            line
+        });
+    }
+
+    let mut scope = rhai::Scope::new();
+
+    let args_rhai: rhai::Array = args.map(|x| x.into()).collect();
+    scope.push("args", args_rhai);
+
+    match engine.run_with_scope(&mut scope, &script) {
+        Ok(()) => (),
+        Err(err) => {
+            println!("{}: {:?}", path, err);
+        }
+    }
 }
 
 fn run<
     D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>, fs: &Arc<Mutex<FileSystem<D>>>, cwd: &mut Vec<String>, line: &str) {
+    V: Iterator<Item=OsVideoMode>,
+    O: Os<D, V> + 'static,
+>(
+    os: &Arc<Mutex<O>>,
+    fs: &Arc<Mutex<FileSystem<D>>>,
+    cwd: &mut Vec<String>,
+    line: &str
+) {
     let mut args = line.split(' ')
         .filter(|x| !x.is_empty());
     let cmd = match args.next() {
@@ -214,7 +329,7 @@ fn run<
             }
         },
         "clear" | "cls" => {
-            os.clear_text();
+            os.lock().clear_text();
         },
         "echo" => {
             for (i, arg) in args.enumerate() {
@@ -312,90 +427,13 @@ fn run<
         },
         #[cfg(feature = "rhai")]
         "rhai" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                //TODO: repl?
-                None => ""
-            };
-
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-
-            let script = match fs.lock().tx(|mut tx| {
-                let node = lookup_node(&mut tx, &path)?;
-                if node.data().is_dir() {
-                    return Err(Error::new(syscall::EISDIR));
-                }
-
-                read_node(&mut tx, &node)
-            }) {
-                Ok(ok) => match String::from_utf8(ok) {
-                    Ok(ok) => ok,
-                    Err(err) => {
-                        println!("{}: {}: {:?}", cmd, arg, err);
-                        return;
-                    }
+            match args.next() {
+                Some(path) => {
+                    run_rhai(os, fs, cwd, path, args);
                 },
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
-                    return;
-                }
-            };
-
-            let mut engine = rhai::Engine::new();
-            engine.on_print(|string| println!("{}", string));
-            engine.on_debug(|string, src, pos| {
-                println!("debug {:?} at {:?}: {}", src, pos, string)
-            });
-
-            {
-                let fs = fs.clone();
-                engine.register_fn("open", move |path: &str| -> Result<u32, Box<rhai::EvalAltResult>> {
-                    let path_vec: Vec<String> = path
-                        .split("/")
-                        .filter(|x| !x.is_empty())
-                        .map(|x| x.to_string())
-                        .collect();
-                    match fs.lock().tx(move |mut tx| {
-                        lookup_node(&mut tx, &path_vec)
-                    }) {
-                        Ok(node) => Ok(node.ptr().id()),
-                        Err(err) => Err(format!("{}", err).into())
-                    }
-                });
-            }
-
-            {
-                let fs = fs.clone();
-                engine.register_fn("read", move |fd: u32| -> Result<String, Box<rhai::EvalAltResult>> {
-                    match fs.lock().tx(move |mut tx| {
-                        let node = tx.read_tree(TreePtr::new(fd))?;
-                        read_node(&mut tx, &node)
-                    }) {
-                        Ok(data) => match String::from_utf8(data) {
-                            Ok(ok) => Ok(ok),
-                            Err(err) => Err(format!("{}", err).into())
-                        },
-                        Err(err) => Err(format!("{}", err).into())
-                    }
-                });
-            }
-
-            let mut scope = rhai::Scope::new();
-
-            let args_rhai: rhai::Array = args.map(|x| x.into()).collect();
-            scope.push("args", args_rhai);
-
-            match engine.run_with_scope(&mut scope, &script) {
-                Ok(()) => (),
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
+                //TODO: repl?
+                None => {
+                    println!("{}: no argument specified", cmd);
                 }
             }
         },
@@ -527,23 +565,34 @@ fn run<
                 }
             }
         },
+        #[cfg(feature = "rhai")]
         _ => {
-            println!("Command '{}' not found", cmd)
-        }
+            run_rhai(os, fs, cwd, &format!("/redos/{}.rhai", cmd), args);
+        },
+        #[cfg(not(feature = "rhai"))]
+        _ => {
+            println!("{}: command not found", cmd);
+        },
     }
 }
 
 pub(crate) fn main<
     D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>, fs: FileSystem<D>) -> ! {
+    V: Iterator<Item=OsVideoMode>,
+    O: Os<D, V> + 'static,
+>(
+    os: O,
+    fs: FileSystem<D>
+) -> ! {
     println!("Welcome to ReDOS");
+
+    let os = Arc::new(Mutex::new(os));
 
     let fs = Arc::new(Mutex::new(fs));
 
     let mut cwd = Vec::<String>::new();
 
-    run(os, &fs, &mut cwd, "call redos/autoexec");
+    run(&os, &fs, &mut cwd, "call redos/autoexec");
 
     loop {
         print!("/");
@@ -554,9 +603,9 @@ pub(crate) fn main<
             print!("{}", part);
         }
         print!("> ");
+        let line = read_line(&mut *os.lock());
+        println!();
 
-        let line = read_line(os);
-
-        run(os, &fs, &mut cwd, &line);
+        run(&os, &fs, &mut cwd, &line);
     }
 }

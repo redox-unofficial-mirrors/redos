@@ -83,7 +83,7 @@ pub fn main() -> Result<()> {
 
     find_acpi_table_pointers(&mut os);
 
-    let (page_phys, func, mut args) = crate::main(&mut os);
+    let (page_phys, func, mut args) = crate::main(os);
 
     unsafe {
         args.acpi_rsdps_base = RSDPS_AREA_BASE as u64;

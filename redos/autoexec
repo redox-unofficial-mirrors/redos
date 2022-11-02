@@ -1,7 +1,0 @@
-echo autoexec start
-
-rhai redos/text.rhai test args
-
-rhai redos/prime.rhai
-
-echo autoexec end

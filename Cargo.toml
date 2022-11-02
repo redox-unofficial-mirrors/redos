@@ -41,7 +41,7 @@ features = [
   "no_module",
   #"no_object",
   "no_optimize",
-  "no_position",
+  #"no_position",
   "unchecked"
 ]
 optional = true
