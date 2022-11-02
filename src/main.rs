@@ -375,7 +375,7 @@ fn elf_entry(data: &[u8]) -> (u64, bool) {
 
 #[cfg(feature = "dos")]
 fn main<
-    D: Disk,
+    D: Disk + 'static,
     V: Iterator<Item=OsVideoMode>
 >(os: &mut dyn Os<D, V>) -> (usize, u64, KernelArgs) {
     println!("Redox OS Bootloader {} on {}", env!("CARGO_PKG_VERSION"), os.name());
@@ -393,7 +393,7 @@ fn main<
     println!(": {} MiB", fs.header.size() / MIBI as u64);
     println!();
 
-    dos::main(os, &mut fs);
+    dos::main(os, fs);
 }
 
 #[cfg(not(feature = "dos"))]

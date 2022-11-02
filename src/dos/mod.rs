@@ -1,8 +1,11 @@
 use alloc::{
+    boxed::Box,
     string::{String, ToString},
+    sync::Arc,
     vec::Vec,
 };
 use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
+use spin::Mutex;
 use syscall::Error;
 
 use crate::{Os, OsKey, OsVideoMode};
@@ -73,9 +76,9 @@ fn read_line<
 }
 
 fn run<
-    D: Disk,
+    D: Disk + 'static,
     V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>, fs: &mut FileSystem<D>, cwd: &mut Vec<String>, line: &str) {
+>(os: &mut dyn Os<D, V>, fs: &Arc<Mutex<FileSystem<D>>>, cwd: &mut Vec<String>, line: &str) {
     let mut args = line.split(' ')
         .filter(|x| !x.is_empty());
     let cmd = match args.next() {
@@ -104,7 +107,7 @@ fn run<
                 path.push(part.to_string());
             }
 
-            let string = match fs.tx(|mut tx| {
+            let string = match fs.lock().tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if node.data().is_dir() {
                     return Err(Error::new(syscall::EISDIR));
@@ -149,7 +152,7 @@ fn run<
                 path.push(part.to_string());
             }
 
-            match fs.tx(|mut tx| {
+            match fs.lock().tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if node.data().is_dir() {
                     return Err(Error::new(syscall::EISDIR));
@@ -195,7 +198,7 @@ fn run<
                 path.push(part.to_string());
             }
 
-            match fs.tx(|mut tx| {
+            match fs.lock().tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if ! node.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -242,7 +245,7 @@ fn run<
                 path.push(part.to_string());
             }
 
-            match fs.tx(|mut tx| {
+            match fs.lock().tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if ! node.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -290,7 +293,7 @@ fn run<
                 }
             };
 
-            match fs.tx(|mut tx| {
+            match fs.lock().tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -311,13 +314,9 @@ fn run<
         "rhai" => {
             let arg = match args.next() {
                 Some(some) => some,
+                //TODO: repl?
                 None => ""
             };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
 
             let mut path = if arg.starts_with("/") {
                 Vec::new()
@@ -328,7 +327,7 @@ fn run<
                 path.push(part.to_string());
             }
 
-            let script = match fs.tx(|mut tx| {
+            let script = match fs.lock().tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if node.data().is_dir() {
                     return Err(Error::new(syscall::EISDIR));
@@ -351,8 +350,49 @@ fn run<
 
             let mut engine = rhai::Engine::new();
             engine.on_print(|string| println!("{}", string));
+            engine.on_debug(|string, src, pos| {
+                println!("debug {:?} at {:?}: {}", src, pos, string)
+            });
 
-            match engine.run(&script) {
+            {
+                let fs = fs.clone();
+                engine.register_fn("open", move |path: &str| -> Result<u32, Box<rhai::EvalAltResult>> {
+                    let path_vec: Vec<String> = path
+                        .split("/")
+                        .filter(|x| !x.is_empty())
+                        .map(|x| x.to_string())
+                        .collect();
+                    match fs.lock().tx(move |mut tx| {
+                        lookup_node(&mut tx, &path_vec)
+                    }) {
+                        Ok(node) => Ok(node.ptr().id()),
+                        Err(err) => Err(format!("{}", err).into())
+                    }
+                });
+            }
+
+            {
+                let fs = fs.clone();
+                engine.register_fn("read", move |fd: u32| -> Result<String, Box<rhai::EvalAltResult>> {
+                    match fs.lock().tx(move |mut tx| {
+                        let node = tx.read_tree(TreePtr::new(fd))?;
+                        read_node(&mut tx, &node)
+                    }) {
+                        Ok(data) => match String::from_utf8(data) {
+                            Ok(ok) => Ok(ok),
+                            Err(err) => Err(format!("{}", err).into())
+                        },
+                        Err(err) => Err(format!("{}", err).into())
+                    }
+                });
+            }
+
+            let mut scope = rhai::Scope::new();
+
+            let args_rhai: rhai::Array = args.map(|x| x.into()).collect();
+            scope.push("args", args_rhai);
+
+            match engine.run_with_scope(&mut scope, &script) {
                 Ok(()) => (),
                 Err(err) => {
                     println!("{}: {}: {:?}", cmd, arg, err);
@@ -386,7 +426,7 @@ fn run<
                 }
             };
 
-            match fs.tx(|mut tx| {
+            match fs.lock().tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -428,7 +468,7 @@ fn run<
                 }
             };
 
-            match fs.tx(|mut tx| {
+            match fs.lock().tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -470,7 +510,7 @@ fn run<
                 }
             };
 
-            match fs.tx(|mut tx| {
+            match fs.lock().tx(|mut tx| {
                 let parent = lookup_node(&mut tx, &path)?;
                 if ! parent.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
@@ -494,14 +534,16 @@ fn run<
 }
 
 pub(crate) fn main<
-    D: Disk,
+    D: Disk + 'static,
     V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>, fs: &mut FileSystem<D>) -> ! {
+>(os: &mut dyn Os<D, V>, fs: FileSystem<D>) -> ! {
     println!("Welcome to ReDOS");
+
+    let fs = Arc::new(Mutex::new(fs));
 
     let mut cwd = Vec::<String>::new();
 
-    run(os, fs, &mut cwd, "call redos/autoexec");
+    run(os, &fs, &mut cwd, "call redos/autoexec");
 
     loop {
         print!("/");
@@ -515,6 +557,6 @@ pub(crate) fn main<
 
         let line = read_line(os);
 
-        run(os, fs, &mut cwd, &line);
+        run(os, &fs, &mut cwd, &line);
     }
 }
