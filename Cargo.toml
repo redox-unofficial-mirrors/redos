@@ -26,6 +26,16 @@ version = "0.5.0"
 default-features = false
 features = ["force-soft"]
 
+[dependencies.rhai]
+version = "1.10"
+default-features = false
+features = [
+  "no_std",
+  "no_float", # TODO: can we provide floats?
+  "only_i32", # TODO: fix issues with u128
+]
+optional = true
+
 [target.'cfg(target_os = "uefi")'.dependencies]
 redox_uefi = "0.1.5"
 redox_uefi_std = "0.1.7"
@@ -35,6 +45,12 @@ x86 = "0.47.0"
 
 [features]
 default = ["dos"]
-dos = []
+dos = ["rhai"]
 live = []
 serial_debug = []
+
+[profile.release]
+#lto = true # breaks stuff
+opt-level = "z"
+panic = "abort"
+strip = true

@@ -7,13 +7,12 @@ include mk/$(TARGET).mk
 clean:
 	rm -rf build target
 
-$(BUILD)/filesystem:
+$(BUILD)/filesystem: autoexec.rhai
 	mkdir -p $(BUILD)
 	rm -f $@.partial
 	mkdir $@.partial
 	mkdir $@.partial/boot
-	fallocate -l 1MiB $@.partial/boot/kernel
-	echo "This is a test file" > $@.partial/test.txt
+	cp autoexec.rhai $@.partial/autoexec.rhai
 	mv $@.partial $@
 
 $(BUILD)/filesystem.bin: $(BUILD)/filesystem
