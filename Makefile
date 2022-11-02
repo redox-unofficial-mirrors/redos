@@ -7,12 +7,11 @@ include mk/$(TARGET).mk
 clean:
 	rm -rf build target
 
-$(BUILD)/filesystem: redos/autoexec.rhai
+$(BUILD)/filesystem: $(shell find redos -type f)
 	mkdir -p $(BUILD)
 	rm -f $@.partial
 	mkdir $@.partial
-	mkdir $@.partial/redos
-	cp $< $@.partial/redos/autoexec.rhai
+	cp -r redos $@.partial/redos
 	mv $@.partial $@
 
 $(BUILD)/filesystem.bin: $(BUILD)/filesystem

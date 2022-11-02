@@ -16,6 +16,28 @@ fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<Tree
     Ok(node)
 }
 
+fn read_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Result<Vec<u8>, Error> {
+    let size = {
+        let size = node.data().size();
+        if size > 1024 * 1024 {
+            // Limit reading to files up to 1 MiB
+            return Err(Error::new(syscall::EFBIG));
+        }
+        size as usize
+    };
+
+    let mut data = vec![0; size];
+    let mut offset = 0;
+    while offset <= data.len() {
+        let count = tx.read_node_inner(&node, offset as u64, &mut data[offset..])?;
+        if count == 0 {
+            data.truncate(offset);
+            return Ok(data);
+        }
+        offset += count;
+    }
+    Err(Error::new(syscall::EFBIG))
+}
 
 fn read_line<
     D: Disk,
@@ -62,6 +84,51 @@ fn run<
     };
 
     match cmd.to_lowercase().as_str() {
+        "call" => {
+            let arg = match args.next() {
+                Some(some) => some,
+                None => ""
+            };
+            //TODO: support multiple args
+            if args.next().is_some() {
+                println!("{}: too many arguments", cmd);
+                return;
+            }
+
+            let mut path = if arg.starts_with("/") {
+                Vec::new()
+            } else {
+                cwd.clone()
+            };
+            for part in arg.split("/").filter(|x| !x.is_empty()) {
+                path.push(part.to_string());
+            }
+
+            let string = match fs.tx(|mut tx| {
+                let node = lookup_node(&mut tx, &path)?;
+                if node.data().is_dir() {
+                    return Err(Error::new(syscall::EISDIR));
+                }
+
+                read_node(&mut tx, &node)
+            }) {
+                Ok(data) => match String::from_utf8(data) {
+                    Ok(string) => string,
+                    Err(err) => {
+                        println!("{}: {}: {:?}", cmd, arg, err);
+                        return;
+                    },
+                }
+                Err(err) => {
+                    println!("{}: {}: {:?}", cmd, arg, err);
+                    return;
+                }
+            };
+
+            for line in string.lines() {
+                run(os, fs, cwd, line);
+            }
+        },
         "cat" | "type" => {
             let arg = match args.next() {
                 Some(some) => some,
@@ -267,20 +334,10 @@ fn run<
                     return Err(Error::new(syscall::EISDIR));
                 }
 
-                let mut data = vec![0; node.data().size() as usize];
-                let mut offset = 0;
-                loop {
-                    let count = tx.read_node_inner(&node, offset, &mut data[offset as usize..])?;
-                    if count == 0 {
-                        data.truncate(offset as usize);
-                        break;
-                    }
-                    offset += count as u64;
-                }
-                Ok(data)
+                read_node(&mut tx, &node)
             }) {
-                Ok(data) => match String::from_utf8(data) {
-                    Ok(string) => string,
+                Ok(ok) => match String::from_utf8(ok) {
+                    Ok(ok) => ok,
                     Err(err) => {
                         println!("{}: {}: {:?}", cmd, arg, err);
                         return;
@@ -295,7 +352,7 @@ fn run<
             let mut engine = rhai::Engine::new();
             engine.on_print(|string| println!("{}", string));
 
-            match engine.run(&string) {
+            match engine.run(&script) {
                 Ok(()) => (),
                 Err(err) => {
                     println!("{}: {}: {:?}", cmd, arg, err);
@@ -439,12 +496,12 @@ fn run<
 pub(crate) fn main<
     D: Disk,
     V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>, fs: &mut FileSystem<D>) {
+>(os: &mut dyn Os<D, V>, fs: &mut FileSystem<D>) -> ! {
     println!("Welcome to ReDOS");
 
     let mut cwd = Vec::<String>::new();
 
-    run(os, fs, &mut cwd, "rhai redos/autoexec.rhai");
+    run(os, fs, &mut cwd, "call redos/autoexec");
 
     loop {
         print!("/");

@@ -373,6 +373,7 @@ fn elf_entry(data: &[u8]) -> (u64, bool) {
     }
 }
 
+#[cfg(feature = "dos")]
 fn main<
     D: Disk,
     V: Iterator<Item=OsVideoMode>
@@ -392,8 +393,28 @@ fn main<
     println!(": {} MiB", fs.header.size() / MIBI as u64);
     println!();
 
-    #[cfg(feature = "dos")]
     dos::main(os, &mut fs);
+}
+
+#[cfg(not(feature = "dos"))]
+fn main<
+    D: Disk,
+    V: Iterator<Item=OsVideoMode>
+>(os: &mut dyn Os<D, V>) -> (usize, u64, KernelArgs) {
+    println!("Redox OS Bootloader {} on {}", env!("CARGO_PKG_VERSION"), os.name());
+
+    let (mut fs, password_opt) = redoxfs(os);
+
+    print!("RedoxFS ");
+    for i in 0..fs.header.uuid().len() {
+        if i == 4 || i == 6 || i == 8 || i == 10 {
+            print!("-");
+        }
+
+        print!("{:>02x}", fs.header.uuid()[i]);
+    }
+    println!(": {} MiB", fs.header.size() / MIBI as u64);
+    println!();
 
     let mut mode_opts = Vec::new();
     for output_i in 0..os.video_outputs() {

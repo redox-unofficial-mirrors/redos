@@ -1,0 +1,5 @@
+echo autoexec.rhai start
+
+rhai redos/prime.rhai
+
+echo autoexec.rhai end

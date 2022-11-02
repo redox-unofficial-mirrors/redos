@@ -1,5 +1,3 @@
-print("autoexec.rhai start");
-
 const ANSWER = 78_498;
 const MAX_NUMBER_TO_CHECK = 1_000_000;
 
@@ -28,5 +26,3 @@ print(`Total ${total_primes_found} primes <= ${MAX_NUMBER_TO_CHECK}`);
 if total_primes_found != ANSWER {
     print(`The answer is WRONG! Should be ${ANSWER}!`);
 }
-
-print("autoexec.rhai end");
