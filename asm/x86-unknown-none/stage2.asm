@@ -20,10 +20,58 @@ stage2.entry:
 %include "thunk.asm"
 
 USE32
+stage3.load:
+    ; Load address
+    mov edi, 0x100000
+    ; LBA
+    mov eax, (stage3 - stage1) / 512
+    ; Count
+    mov ecx, (stage3.end - stage3) / 512
+
+.loop:
+    push ecx
+    cmp ecx, 127
+    jbe .good_size
+    mov ecx, 127
+
+.good_size:
+    ; Load at 0x70000 (512KiB minus 64KiB disk buffer)
+    mov ebx, 0 ; Lower 4 bits of address should be zero
+    mov edx, 0x7000 ; Segment of address
+
+    mov dword [THUNK_ES], 0
+    mov dword [THUNK_EDI], 0
+    mov dword [THUNK_ESI], 0
+    mov dword [THUNK_EBP], 0
+    mov dword [THUNK_EBX], ebx
+    mov dword [THUNK_EDX], edx
+    mov dword [THUNK_ECX], ecx
+    mov dword [THUNK_EAX], eax
+    mov dword [thunk.func], load
+    call thunk.enter
+    ; TODO: evaluate result!
+
+    ; Copy from disk buffer to load address
+    mov esi, 0x70000
+    shl ecx, 9 ; Multiply sectors by 512
+    cld
+    rep movsb
+
+    pop ecx
+    cmp ecx, 127
+    jbe .finished
+    add eax, 127
+    sub ecx, 127
+    jmp .loop
+
+.finished:
+    ret
 
 stage3.entry:
     ; stage3 stack at 448 KiB (512KiB minus 64KiB disk buffer)
     mov esp, 0x70000
+
+    call stage3.load
 
     ; push arguments
     mov eax, thunk.int16
@@ -39,7 +87,7 @@ stage3.entry:
     push eax
     mov eax, kernel.entry
     push eax
-    mov eax, [stage3 + 0x18]
+    mov eax, [0x100000 + 0x18]
     call eax
 .halt:
     cli
@@ -102,7 +150,7 @@ kernel:
     ; Bit 31: Paging, Bit 16: write protect kernel, Bit 0: Protected Mode
     or eax, 1 << 31 | 1 << 16 | 1
     mov cr0, eax
-
+    
     ; enable FPU
     ;TODO: move to Rust
     mov eax, cr0

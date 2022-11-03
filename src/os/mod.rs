@@ -67,6 +67,8 @@ pub trait Os<
 
     fn filesystem(&self, password_opt: Option<&[u8]>) -> syscall::Result<redoxfs::FileSystem<D>>;
 
+    fn memory_map(&self) -> MemoryMapIter;
+
     fn video_outputs(&self) -> usize;
     fn video_modes(&self, output_i: usize) -> V;
     fn set_video_mode(&self, output_i: usize, mode: &mut OsVideoMode);

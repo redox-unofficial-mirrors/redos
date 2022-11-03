@@ -50,7 +50,7 @@ stage1: ; dl comes with disk
 
     mov eax, (stage2 - stage1) / 512
     mov bx, stage2
-    mov cx, (stage3.end - stage2) / 512
+    mov cx, (stage2.end - stage2) / 512
     mov dx, 0
     call load
 

@@ -1,3 +1,13 @@
+%define THUNK_STACK_ADDR 0x7C00 - 64
+%define THUNK_ES THUNK_STACK_ADDR
+%define THUNK_EDI THUNK_STACK_ADDR + 2
+%define THUNK_ESI THUNK_STACK_ADDR + 6
+%define THUNK_EBP THUNK_STACK_ADDR + 10
+%define THUNK_EBX THUNK_STACK_ADDR + 14
+%define THUNK_EDX THUNK_STACK_ADDR + 18
+%define THUNK_ECX THUNK_STACK_ADDR + 22
+%define THUNK_EAX THUNK_STACK_ADDR + 26
+
 SECTION .text
 USE32
 
@@ -107,7 +117,7 @@ USE16
     mov ss, eax
 
     ; set stack
-    mov esp, 0x7C00 - 64
+    mov esp, THUNK_STACK_ADDR
 
     ; load registers and ES
     pop es

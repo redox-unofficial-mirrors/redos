@@ -386,7 +386,7 @@ fn run<
             let mut free = 0;
             let mut reserved = 0;
             let mut total = 0;
-            for area in MemoryMapIter::new() {
+            for area in state.lock().os.memory_map() {
                 match area.kind {
                     OsMemoryKind::Free => {
                         free += area.size;

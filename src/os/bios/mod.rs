@@ -16,6 +16,8 @@ use self::thunk::ThunkData;
 use self::vbe::VideoModeIter;
 use self::vga::{VgaTextColor, Vga};
 
+pub use self::memory_map::MemoryMapIter;
+
 #[macro_use]
 mod macros;
 
@@ -87,6 +89,10 @@ impl Os<
 
         //TODO: get block from partition table
         redoxfs::FileSystem::open(disk, password_opt, None, false)
+    }
+
+    fn memory_map(&self) -> MemoryMapIter {
+        MemoryMapIter::new(self.thunk15)
     }
 
     fn video_outputs(&self) -> usize {

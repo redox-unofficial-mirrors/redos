@@ -200,6 +200,10 @@ impl Os<
         Err(syscall::Error::new(syscall::ENOENT))
     }
 
+    fn memory_map(&self) -> MemoryMapIter {
+        MemoryMapIter::new()
+    }
+
     fn video_outputs(&self) -> usize {
         self.outputs.borrow().len()
     }
