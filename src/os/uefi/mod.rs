@@ -31,6 +31,8 @@ use self::{
     video_mode::VideoModeIter,
 };
 
+pub use self::memory_map::MemoryMapIter;
+
 mod acpi;
 mod arch;
 mod disk;

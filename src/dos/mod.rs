@@ -9,7 +9,8 @@ use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
 use spin::Mutex;
 use syscall::Error;
 
-use crate::{Os, OsKey, OsVideoMode};
+use crate::{Os, OsKey, OsMemoryKind, OsVideoMode};
+use crate::os::MemoryMapIter;
 
 fn rhai_err<E: ToString>(err: E) -> Box<rhai::EvalAltResult> {
     err.to_string().into()
@@ -380,6 +381,45 @@ fn run<
                     println!("{}: {}: {:?}", cmd, arg, err);
                 }
             }
+        },
+        "mem" => {
+            let mut free = 0;
+            let mut reserved = 0;
+            let mut total = 0;
+            for area in MemoryMapIter::new() {
+                match area.kind {
+                    OsMemoryKind::Free => {
+                        free += area.size;
+                    },
+                    _ => {
+                        reserved += area.size;
+                    },
+                }
+                total += area.size;
+            }
+            let print_size = |size| {
+                if size >= 1 << 31 /* 2 GiB */ {
+                    print!("{} GiB", size >> 30 /* 1 GiB */);
+                } else if size >= 1 << 21 /* 2 MiB */ {
+                    print!("{} MiB", size >> 20 /* 1 MiB */);
+                } else if size >= 1 << 11 /* 2 KiB */ {
+                    print!("{} KiB", size >> 10 /* 1 KiB */);
+                } else {
+                    print!("{} B", size);
+                }
+            };
+
+            print!("Free: ");
+            print_size(free);
+            println!();
+
+            print!("Reserved: ");
+            print_size(reserved);
+            println!();
+
+            print!("Total: ");
+            print_size(total);
+            println!();
         },
         "mkdir" | "md" => {
             let arg = match args.next() {
