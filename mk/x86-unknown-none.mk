@@ -71,5 +71,6 @@ qemu: $(BUILD)/harddrive.bin
 		-mon chardev=debug \
 		-machine pc \
 		-net none \
+		-enable-kvm \
 		-cpu 486 \
 		-drive file=$<,format=raw

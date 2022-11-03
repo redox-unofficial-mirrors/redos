@@ -194,6 +194,18 @@ fn run_rhai<
 
     {
         let state = state.clone();
+        engine.register_fn("key", move || -> char {
+            match state.lock().os.get_key() {
+                OsKey::Backspace | OsKey::Delete => '\x08',
+                OsKey::Char(c) => c,
+                OsKey::Enter => '\n',
+                _ => '\0',
+            }
+        });
+    }
+
+    {
+        let state = state.clone();
         engine.register_fn("prompt", move |prompt: &str| -> String {
             print!("{}", prompt);
             let line = read_line(&mut state.lock().os);
@@ -201,6 +213,19 @@ fn run_rhai<
                 print!("\x08 \x08");
             }
             line
+        });
+    }
+
+    {
+        engine.register_fn("putchar", move |c: char| {
+            print!("{}", c);
+        });
+    }
+
+    {
+        let state = state.clone();
+        engine.register_fn("highlight", move |highlight: bool| {
+            state.lock().os.set_text_highlight(highlight);
         });
     }
 
