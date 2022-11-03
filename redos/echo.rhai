@@ -5,3 +5,4 @@ for arg in args {
     }
     line += arg;
 }
+print(line);
