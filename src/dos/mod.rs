@@ -61,6 +61,24 @@ fn readdir_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Resu
     Ok(children)
 }
 
+fn write_node<D: Disk>(tx: &mut Transaction<D>, node: &mut TreeData<Node>, data: &[u8]) -> Result<bool, Error> {
+    if node.data().is_dir() {
+        return Err(Error::new(syscall::EISDIR));
+    }
+
+    let mut node_changed = tx.truncate_node_inner(node, 0)?;
+
+    let mut offset = 0;
+    while offset < data.len() as u64 {
+        let slice = &data[offset as usize..];
+        if tx.write_node_inner(node, &mut offset, slice)? {
+            node_changed = true;
+        }
+    }
+
+    Ok(node_changed)
+}
+
 fn read_line<
     D: Disk,
     V: Iterator<Item=OsVideoMode>

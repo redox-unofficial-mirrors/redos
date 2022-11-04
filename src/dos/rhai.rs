@@ -15,6 +15,7 @@ use crate::dos::{
     read_line,
     read_node,
     readdir_node,
+    write_node,
     State
 };
 use crate::os::MemoryMapIter;
@@ -168,6 +169,19 @@ pub(crate) fn run<
                 }
             }
             Ok(array)
+        });
+    }
+
+     {
+        let state = state.clone();
+        engine.register_fn("write", move |fd: u32, data: &str| -> Result<(), Box<rhai::EvalAltResult>> {
+            state.lock().fs.tx(move |mut tx| {
+                let mut node = tx.read_tree(TreePtr::new(fd))?;
+                if write_node(&mut tx, &mut node, data.as_bytes())? {
+                    tx.sync_tree(node)?;
+                }
+                Ok(())
+            }).map_err(rhai_err)
         });
     }
 
