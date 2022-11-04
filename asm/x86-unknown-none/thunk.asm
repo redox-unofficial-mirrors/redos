@@ -32,6 +32,17 @@ thunk:
 .esp: dd 0
 .cr0: dd 0
 
+.clear:
+    mov dword [THUNK_ES], 0
+    mov dword [THUNK_EDI], 0
+    mov dword [THUNK_ESI], 0
+    mov dword [THUNK_EBP], 0
+    mov dword [THUNK_EBX], 0
+    mov dword [THUNK_EDX], 0
+    mov dword [THUNK_ECX], 0
+    mov dword [THUNK_EAX], 0
+    ret
+
 .enter:
     ; save flags
     pushfd

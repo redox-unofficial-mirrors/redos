@@ -39,10 +39,7 @@ stage3.load:
     mov ebx, 0 ; Lower 4 bits of address should be zero
     mov edx, 0x7000 ; Segment of address
 
-    mov dword [THUNK_ES], 0
-    mov dword [THUNK_EDI], 0
-    mov dword [THUNK_ESI], 0
-    mov dword [THUNK_EBP], 0
+    call thunk.clear
     mov dword [THUNK_EBX], ebx
     mov dword [THUNK_EDX], edx
     mov dword [THUNK_ECX], ecx
@@ -150,7 +147,7 @@ kernel:
     ; Bit 31: Paging, Bit 16: write protect kernel, Bit 0: Protected Mode
     or eax, 1 << 31 | 1 << 16 | 1
     mov cr0, eax
-    
+
     ; enable FPU
     ;TODO: move to Rust
     mov eax, cr0
