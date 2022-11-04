@@ -41,7 +41,7 @@ const THUNK_STACK_ADDR: usize = 0x7C00; // Grows downwards
 const VGA_ADDR: usize = 0xB8000;
 
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+pub static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 pub(crate) static VGA: Mutex<Vga> = Mutex::new(
     unsafe { Vga::new(VGA_ADDR, 80, 25) }

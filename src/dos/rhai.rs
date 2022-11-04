@@ -5,11 +5,10 @@ use alloc::{
     vec::Vec,
 };
 use core::marker::PhantomData;
-use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
+use redoxfs::{Disk, TreePtr};
 use spin::Mutex;
-use syscall::Error;
 
-use crate::{Os, OsKey, OsMemoryKind, OsVideoMode};
+use crate::{Os, OsKey, OsVideoMode};
 use crate::dos::{
     lookup_node,
     read_line,
@@ -18,7 +17,6 @@ use crate::dos::{
     write_node,
     State
 };
-use crate::os::MemoryMapIter;
 
 fn rhai_err<E: ToString>(err: E) -> Box<rhai::EvalAltResult> {
     err.to_string().into()

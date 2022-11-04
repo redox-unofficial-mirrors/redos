@@ -15,6 +15,8 @@ use crate::os::MemoryMapIter;
 #[cfg(feature = "rhai")]
 mod rhai;
 
+mod vi;
+
 fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<TreeData<Node>, Error> {
     let mut node = tx.read_tree(TreePtr::root())?;
     for part in path.iter() {
@@ -129,7 +131,7 @@ impl<
     V: Iterator<Item=OsVideoMode> + 'static,
     O: Os<D, V> + 'static,
 > State<D, V, O> {
-    fn open(&mut self, path: &str) -> Result<u32, Error> {
+    fn path_parts(&self, path: &str) -> Vec<String> {
         let mut path_parts = if path.starts_with("/") {
             Vec::new()
         } else {
@@ -146,12 +148,32 @@ impl<
                 path_parts.push(part.to_string());
             }
         }
+        path_parts
+    }
+
+    fn open(&mut self, path: &str) -> Result<u32, Error> {
+        let path_parts = self.path_parts(path);
         self.fs.tx(move |mut tx| {
             let node = lookup_node(&mut tx, &path_parts)?;
             Ok(node.ptr().id())
         })
     }
+
+    fn key(&mut self) -> char {
+        match self.os.get_key() {
+            OsKey::Left => '\u{2190}',
+            OsKey::Right => '\u{2192}',
+            OsKey::Up => '\u{2191}',
+            OsKey::Down => '\u{2193}',
+            OsKey::Backspace => '\x08',
+            OsKey::Delete => '\x7F',
+            OsKey::Enter => '\n',
+            OsKey::Char(c) => c,
+            OsKey::Other => '\0',
+        }
+    }
 }
+
 
 fn run<
     D: Disk + 'static,
@@ -214,6 +236,40 @@ fn run<
                 run(state, line);
             }
         },
+        "cat" => {
+            for arg in args {
+                let mut path = if arg.starts_with("/") {
+                    Vec::new()
+                } else {
+                    state.lock().cwd.clone()
+                };
+                for part in arg.split("/").filter(|x| !x.is_empty()) {
+                    path.push(part.to_string());
+                }
+
+                let string = match state.lock().fs.tx(|mut tx| {
+                    let node = lookup_node(&mut tx, &path)?;
+                    if node.data().is_dir() {
+                        return Err(Error::new(syscall::EISDIR));
+                    }
+
+                    read_node(&mut tx, &node)
+                }) {
+                    Ok(data) => match String::from_utf8(data) {
+                        Ok(string) => string,
+                        Err(err) => {
+                            println!("{}: {}: {:?}", cmd, arg, err);
+                            return;
+                        },
+                    }
+                    Err(err) => {
+                        println!("{}: {}: {:?}", cmd, arg, err);
+                        return;
+                    }
+                };
+                println!("{}", string);
+            }
+        },
         "cd" => {
             let arg = match args.next() {
                 Some(some) => some,
@@ -249,21 +305,55 @@ fn run<
                 }
             }
         },
-        "mem" => {
-            let mut free = 0;
-            let mut reserved = 0;
-            let mut total = 0;
-            for area in state.lock().os.memory_map() {
-                match area.kind {
-                    OsMemoryKind::Free => {
-                        free += area.size;
-                    },
-                    _ => {
-                        reserved += area.size;
-                    },
+        "clear" => {
+            state.lock().os.clear_text();
+        },
+        "echo" => {
+            for (i, arg) in args.enumerate() {
+                if i > 0 {
+                    print!(" ");
                 }
-                total += area.size;
+                print!("{}", arg);
             }
+            println!();
+        },
+        "ls" => {
+            let mut args: Vec<_> = args.collect();
+            if args.is_empty() {
+                args.push(".");
+            }
+
+            let mut state = state.lock();
+            for (i, arg) in args.iter().enumerate() {
+                if args.len() > 1 {
+                    if i > 0 {
+                        println!();
+                    }
+                    state.os.set_text_highlight(true);
+                    println!("{}:", arg);
+                    state.os.set_text_highlight(false);
+                }
+
+                let path_parts = state.path_parts(arg);
+                let children = match state.fs.tx(move |mut tx| {
+                    let node = lookup_node(&mut tx, &path_parts)?;
+                    readdir_node(&mut tx, &node)
+                }) {
+                    Ok(ok) => ok,
+                    Err(err) => {
+                        println!("{}: {}: {}", cmd, arg, err);
+                        return;
+                    }
+                };
+
+                for child in children {
+                    if let Some(name) = child.name() {
+                        println!("{}", name);
+                    }
+                }
+            }
+        },
+        "mem" => {
             let print_size = |size| {
                 if size >= 1 << 31 /* 2 GiB */ {
                     print!("{} GiB", size >> 30 /* 1 GiB */);
@@ -275,6 +365,50 @@ fn run<
                     print!("{} B", size);
                 }
             };
+
+            let mut free = 0;
+            let mut reserved = 0;
+            let mut total = 0;
+            for area in state.lock().os.memory_map() {
+                print!("{:08x} {:08x} ", area.base, area.base + area.size);
+                print_size(area.size);
+                println!(" {:?}", area.kind);
+
+                match area.kind {
+                    OsMemoryKind::Free => {
+                        free += area.size;
+                    },
+                    _ => {
+                        reserved += area.size;
+                    },
+                }
+                total += area.size;
+            }
+
+            #[cfg(all(target_arch = "x86", target_os = "none"))]
+            {
+                use crate::os::ALLOCATOR;
+
+                let stack: u32;
+                unsafe { core::arch::asm!("mov {}, esp", out(reg) stack); }
+                println!("Stack pointer: {:#x}", stack);
+
+                print!("Stack used: ");
+                print_size((0x70000 - stack) as u64);
+                println!();
+
+                print!("Heap free: ");
+                print_size(ALLOCATOR.lock().free() as u64);
+                println!();
+
+                print!("Heap used: ");
+                print_size(ALLOCATOR.lock().used() as u64);
+                println!();
+
+                print!("Heap size: ");
+                print_size(ALLOCATOR.lock().size() as u64);
+                println!();
+            }
 
             print!("Free: ");
             print_size(free);
@@ -465,6 +599,14 @@ fn run<
                 }
             }
         },
+        "vi" => {
+            match vi::vi(state, args) {
+                Ok(()) => (),
+                Err(err) => {
+                    println!("{}: {:?}", cmd, err);
+                }
+            }
+        }
         #[cfg(feature = "rhai")]
         _ => {
             let path = format!("/redos/{}.rhai", cmd);
