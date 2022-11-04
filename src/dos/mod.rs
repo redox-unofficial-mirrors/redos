@@ -192,62 +192,45 @@ fn run<
 
     match cmd.to_lowercase().as_str() {
         "call" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                None => ""
-            };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
+            for arg in args {
+                let string = {
+                    let mut state = state.lock();
 
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                state.lock().cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
+                    let path = state.path_parts(arg);
 
-            let string = match state.lock().fs.tx(|mut tx| {
-                let node = lookup_node(&mut tx, &path)?;
-                if node.data().is_dir() {
-                    return Err(Error::new(syscall::EISDIR));
+                    match state.fs.tx(|mut tx| {
+                        let node = lookup_node(&mut tx, &path)?;
+                        if node.data().is_dir() {
+                            return Err(Error::new(syscall::EISDIR));
+                        }
+
+                        read_node(&mut tx, &node)
+                    }) {
+                        Ok(data) => match String::from_utf8(data) {
+                            Ok(string) => string,
+                            Err(err) => {
+                                println!("{}: {}: {:?}", cmd, arg, err);
+                                return;
+                            },
+                        }
+                        Err(err) => {
+                            println!("{}: {}: {:?}", cmd, arg, err);
+                            return;
+                        }
+                    }
+                };
+
+                for line in string.lines() {
+                    run(state, line);
                 }
-
-                read_node(&mut tx, &node)
-            }) {
-                Ok(data) => match String::from_utf8(data) {
-                    Ok(string) => string,
-                    Err(err) => {
-                        println!("{}: {}: {:?}", cmd, arg, err);
-                        return;
-                    },
-                }
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
-                    return;
-                }
-            };
-
-            for line in string.lines() {
-                run(state, line);
             }
         },
-        "cat" => {
+        "cat" | "type" => {
+            let mut state = state.lock();
             for arg in args {
-                let mut path = if arg.starts_with("/") {
-                    Vec::new()
-                } else {
-                    state.lock().cwd.clone()
-                };
-                for part in arg.split("/").filter(|x| !x.is_empty()) {
-                    path.push(part.to_string());
-                }
+                let path = state.path_parts(arg);
 
-                let string = match state.lock().fs.tx(|mut tx| {
+                let string = match state.fs.tx(|mut tx| {
                     let node = lookup_node(&mut tx, &path)?;
                     if node.data().is_dir() {
                         return Err(Error::new(syscall::EISDIR));
@@ -280,16 +263,10 @@ fn run<
                 return;
             }
 
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                state.lock().cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-
             let mut state = state.lock();
+
+            let path = state.path_parts(arg);
+
             match state.fs.tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
                 if ! node.data().is_dir() {
@@ -305,7 +282,7 @@ fn run<
                 }
             }
         },
-        "clear" => {
+        "clear" | "cls" => {
             state.lock().os.clear_text();
         },
         "echo" => {
@@ -317,7 +294,7 @@ fn run<
             }
             println!();
         },
-        "ls" => {
+        "ls" | "dir" => {
             let mut args: Vec<_> = args.collect();
             if args.is_empty() {
                 args.push(".");
@@ -346,10 +323,16 @@ fn run<
                     }
                 };
 
+                let mut names = Vec::new();
                 for child in children {
                     if let Some(name) = child.name() {
-                        println!("{}", name);
+                        names.push(name.to_string());
                     }
+                }
+
+                names.sort();
+                for name in names {
+                    println!("{}", name);
                 }
             }
         },
@@ -423,46 +406,32 @@ fn run<
             println!();
         },
         "mkdir" | "md" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                None => ""
-            };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
+            let mut state = state.lock();
+            for arg in args {
+                let mut path = state.path_parts(arg);
+                let name = match path.pop() {
+                    Some(some) => some,
+                    None => {
+                        println!("{}: {}: no name specified", cmd, arg);
+                        return;
+                    }
+                };
 
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                state.lock().cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-            let name = match path.pop() {
-                Some(some) => some,
-                None => {
-                    println!("{}: no name specified", cmd);
-                    return;
-                }
-            };
+                match state.fs.tx(|mut tx| {
+                    let parent = lookup_node(&mut tx, &path)?;
+                    if ! parent.data().is_dir() {
+                        return Err(Error::new(syscall::ENOTDIR));
+                    }
 
-            match state.lock().fs.tx(|mut tx| {
-                let parent = lookup_node(&mut tx, &path)?;
-                if ! parent.data().is_dir() {
-                    return Err(Error::new(syscall::ENOTDIR));
-                }
-
-                //TODO: create time!
-                let ctime = (0, 0);
-                tx.create_node(parent.ptr(), &name, Node::MODE_DIR, ctime.0, ctime.1)?;
-                Ok(())
-            }) {
-                Ok(()) => (),
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
+                    //TODO: create time!
+                    let ctime = (0, 0);
+                    tx.create_node(parent.ptr(), &name, Node::MODE_DIR, ctime.0, ctime.1)?;
+                    Ok(())
+                }) {
+                    Ok(()) => (),
+                    Err(err) => {
+                        println!("{}: {}: {:?}", cmd, arg, err);
+                    }
                 }
             }
         },
@@ -472,130 +441,88 @@ fn run<
             return rhai::run(state, path_opt, args);
         },
         "rm" | "del" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                None => ""
-            };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
+            let mut state = state.lock();
+            for arg in args {
+                let mut path = state.path_parts(arg);
+                let name = match path.pop() {
+                    Some(some) => some,
+                    None => {
+                        println!("{}: {}: no name specified", cmd, arg);
+                        return;
+                    }
+                };
 
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                state.lock().cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-            let name = match path.pop() {
-                Some(some) => some,
-                None => {
-                    println!("{}: no name specified", cmd);
-                    return;
-                }
-            };
+                match state.fs.tx(|mut tx| {
+                    let parent = lookup_node(&mut tx, &path)?;
+                    if ! parent.data().is_dir() {
+                        return Err(Error::new(syscall::ENOTDIR));
+                    }
 
-            match state.lock().fs.tx(|mut tx| {
-                let parent = lookup_node(&mut tx, &path)?;
-                if ! parent.data().is_dir() {
-                    return Err(Error::new(syscall::ENOTDIR));
-                }
-
-                tx.remove_node(parent.ptr(), &name, Node::MODE_FILE)?;
-                Ok(())
-            }) {
-                Ok(()) => (),
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
+                    tx.remove_node(parent.ptr(), &name, Node::MODE_FILE)?;
+                    Ok(())
+                }) {
+                    Ok(()) => (),
+                    Err(err) => {
+                        println!("{}: {}: {:?}", cmd, arg, err);
+                    }
                 }
             }
         },
         "rmdir" | "rd" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                None => ""
-            };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
+            let mut state = state.lock();
+            for arg in args {
+                let mut path = state.path_parts(arg);
+                let name = match path.pop() {
+                    Some(some) => some,
+                    None => {
+                        println!("{}: {}: no name specified", cmd, arg);
+                        return;
+                    }
+                };
 
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                state.lock().cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-            let name = match path.pop() {
-                Some(some) => some,
-                None => {
-                    println!("{}: no name specified", cmd);
-                    return;
-                }
-            };
+                match state.fs.tx(|mut tx| {
+                    let parent = lookup_node(&mut tx, &path)?;
+                    if ! parent.data().is_dir() {
+                        return Err(Error::new(syscall::ENOTDIR));
+                    }
 
-            match state.lock().fs.tx(|mut tx| {
-                let parent = lookup_node(&mut tx, &path)?;
-                if ! parent.data().is_dir() {
-                    return Err(Error::new(syscall::ENOTDIR));
-                }
-
-                tx.remove_node(parent.ptr(), &name, Node::MODE_DIR)?;
-                Ok(())
-            }) {
-                Ok(()) => (),
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
+                    tx.remove_node(parent.ptr(), &name, Node::MODE_DIR)?;
+                    Ok(())
+                }) {
+                    Ok(()) => (),
+                    Err(err) => {
+                        println!("{}: {}: {:?}", cmd, arg, err);
+                    }
                 }
             }
         },
         "touch" => {
-            let arg = match args.next() {
-                Some(some) => some,
-                None => ""
-            };
-            //TODO: support multiple args
-            if args.next().is_some() {
-                println!("{}: too many arguments", cmd);
-                return;
-            }
+            let mut state = state.lock();
+            for arg in args {
+                let mut path = state.path_parts(arg);
+                let name = match path.pop() {
+                    Some(some) => some,
+                    None => {
+                        println!("{}: {}: no name specified", cmd, arg);
+                        return;
+                    }
+                };
 
-            let mut path = if arg.starts_with("/") {
-                Vec::new()
-            } else {
-                state.lock().cwd.clone()
-            };
-            for part in arg.split("/").filter(|x| !x.is_empty()) {
-                path.push(part.to_string());
-            }
-            let name = match path.pop() {
-                Some(some) => some,
-                None => {
-                    println!("{}: no name specified", cmd);
-                    return;
-                }
-            };
+                match state.fs.tx(|mut tx| {
+                    let parent = lookup_node(&mut tx, &path)?;
+                    if ! parent.data().is_dir() {
+                        return Err(Error::new(syscall::ENOTDIR));
+                    }
 
-            match state.lock().fs.tx(|mut tx| {
-                let parent = lookup_node(&mut tx, &path)?;
-                if ! parent.data().is_dir() {
-                    return Err(Error::new(syscall::ENOTDIR));
-                }
-
-                //TODO: create time!
-                let ctime = (0, 0);
-                tx.create_node(parent.ptr(), &name, Node::MODE_FILE, ctime.0, ctime.1)?;
-                Ok(())
-            }) {
-                Ok(()) => (),
-                Err(err) => {
-                    println!("{}: {}: {:?}", cmd, arg, err);
+                    //TODO: create time!
+                    let ctime = (0, 0);
+                    tx.create_node(parent.ptr(), &name, Node::MODE_FILE, ctime.0, ctime.1)?;
+                    Ok(())
+                }) {
+                    Ok(()) => (),
+                    Err(err) => {
+                        println!("{}: {}: {:?}", cmd, arg, err);
+                    }
                 }
             }
         },
@@ -603,7 +530,7 @@ fn run<
             match vi::vi(state, args) {
                 Ok(()) => (),
                 Err(err) => {
-                    println!("{}: {:?}", cmd, err);
+                    println!("{}: {}", cmd, err);
                 }
             }
         }
