@@ -38,6 +38,8 @@ cpuid_check:
     mov si, .msg_line
     call print
 
+    ret
+
     jmp .halt
 
 .error:
