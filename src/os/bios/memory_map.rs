@@ -44,7 +44,30 @@ impl Iterator for MemoryMapIter {
         unsafe { self.data.with(self.thunk15); }
 
         //TODO: return error?
-        assert_eq!({ self.data.eax }, 0x534D4150);
+        if self.data.eax != 0x534D4150 {
+            println!("INT 15h, AX=E820h not supported");
+
+            // Fall back to INT 15h, AH=88h
+            self.data = ThunkData::new();
+            self.data.eax = 0x8800;
+
+            unsafe { self.data.with(self.thunk15); }
+
+            // Return None on next
+            self.data.ebx = 0;
+
+            if self.data.eax > 0 {
+                return Some(Self::Item {
+                    base: 0x100000,
+                    size: (self.data.eax as u64) * 1024,
+                    kind: OsMemoryKind::Free,
+                });
+            }
+
+            println!("INT 15h, AH=88h not supported");
+            return None;
+        }
+
         assert_eq!({ self.data.ecx }, mem::size_of::<MemoryMapEntry>() as u32);
 
         let entry = unsafe { ptr::read(MEMORY_MAP_ADDR as *const MemoryMapEntry) };
