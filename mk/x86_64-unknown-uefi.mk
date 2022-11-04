@@ -52,10 +52,10 @@ $(BUILD)/esp.bin: $(BUILD)/bootloader.efi
 $(BUILD)/harddrive.bin: $(BUILD)/esp.bin $(BUILD)/filesystem.bin
 	mkdir -p $(BUILD)
 	rm -f $@.partial
-	fallocate -l 1027MiB $@.partial
+	fallocate -l 11MiB $@.partial
 	$(PARTED) -s -a minimal $@.partial mklabel gpt
 	$(PARTED) -s -a minimal $@.partial mkpart ESP FAT32 1MiB 2MiB
-	$(PARTED) -s -a minimal $@.partial mkpart REDOXFS 2MiB 1026MiB
+	$(PARTED) -s -a minimal $@.partial mkpart REDOXFS 2MiB 10MiB
 	$(PARTED) -s -a minimal $@.partial set 2 boot on
 	dd if=$(BUILD)/esp.bin of=$@.partial bs=1MiB seek=1 conv=notrunc
 	dd if=$(BUILD)/filesystem.bin of=$@.partial bs=1MiB seek=2 conv=notrunc

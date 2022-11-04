@@ -53,9 +53,9 @@ $(BUILD)/bootloader-live.bin: $(BUILD)/bootloader-live.elf $(shell find asm/$(TA
 $(BUILD)/harddrive.bin: $(BUILD)/bootloader.bin $(BUILD)/filesystem.bin
 	mkdir -p $(BUILD)
 	rm -f $@.partial
-	fallocate -l 1027MiB $@.partial
+	fallocate -l 11MiB $@.partial
 	$(PARTED) -s -a minimal $@.partial mklabel msdos
-	$(PARTED) -s -a minimal $@.partial mkpart primary 2MiB 1026MiB
+	$(PARTED) -s -a minimal $@.partial mkpart primary 2MiB 10MiB
 	dd if=$< of=$@.partial bs=1 count=446 conv=notrunc
 	dd if=$< of=$@.partial bs=512 skip=1 seek=1 conv=notrunc
 	dd if=$(BUILD)/filesystem.bin of=$@.partial bs=1MiB seek=2 conv=notrunc

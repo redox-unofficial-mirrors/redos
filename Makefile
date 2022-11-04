@@ -17,5 +17,6 @@ $(BUILD)/filesystem: $(shell find redos -type f)
 $(BUILD)/filesystem.bin: $(BUILD)/filesystem
 	mkdir -p $(BUILD)
 	rm -f $@.partial
+	fallocate -l 8MiB $@.partial
 	redoxfs-ar $@.partial $<
 	mv $@.partial $@
