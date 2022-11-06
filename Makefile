@@ -1,4 +1,4 @@
-TARGET?=x86_64-unknown-uefi
+TARGET?=x86-unknown-none
 BUILD=build/$(TARGET)
 export RUST_TARGET_PATH=$(CURDIR)/targets
 
@@ -7,11 +7,12 @@ include mk/$(TARGET).mk
 clean:
 	rm -rf build target
 
-$(BUILD)/filesystem: $(shell find redos -type f)
+$(BUILD)/filesystem: redos/autoexec redos/*.rhai redos/*.txt $(REDOS_BINS)
 	mkdir -p $(BUILD)
 	rm -f $@.partial
 	mkdir $@.partial
-	cp -r redos $@.partial/redos
+	mkdir $@.partial/redos
+	for file in $^; do cp $$file $@.partial/redos; done
 	mv $@.partial $@
 
 $(BUILD)/filesystem.bin: $(BUILD)/filesystem

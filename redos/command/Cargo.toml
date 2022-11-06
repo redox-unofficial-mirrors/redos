@@ -1,0 +1,11 @@
+[package]
+name = "redos_command"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/main.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+redos_abi = { path = "../abi" }

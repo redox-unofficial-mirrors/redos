@@ -65,3 +65,6 @@ lto = "thin" # uefi cannot compile with fat lto
 opt-level = "s"
 panic = "abort"
 split-debuginfo = "packed"
+
+[workspace]
+members = ["redos/*"]
