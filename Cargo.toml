@@ -55,7 +55,7 @@ x86 = "0.47.0"
 
 [features]
 default = ["dos"]
-dos = ["rhai"]
+dos = []
 live = []
 serial_debug = []
 

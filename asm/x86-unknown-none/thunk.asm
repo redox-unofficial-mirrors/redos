@@ -1,13 +1,3 @@
-%define THUNK_STACK_ADDR 0x7C00 - 64
-%define THUNK_ES THUNK_STACK_ADDR
-%define THUNK_EDI THUNK_STACK_ADDR + 2
-%define THUNK_ESI THUNK_STACK_ADDR + 6
-%define THUNK_EBP THUNK_STACK_ADDR + 10
-%define THUNK_EBX THUNK_STACK_ADDR + 14
-%define THUNK_EDX THUNK_STACK_ADDR + 18
-%define THUNK_ECX THUNK_STACK_ADDR + 22
-%define THUNK_EAX THUNK_STACK_ADDR + 26
-
 SECTION .text
 USE32
 
@@ -31,17 +21,6 @@ thunk:
 .func: dd 0
 .esp: dd 0
 .cr0: dd 0
-
-.clear:
-    mov dword [THUNK_ES], 0
-    mov dword [THUNK_EDI], 0
-    mov dword [THUNK_ESI], 0
-    mov dword [THUNK_EBP], 0
-    mov dword [THUNK_EBX], 0
-    mov dword [THUNK_EDX], 0
-    mov dword [THUNK_ECX], 0
-    mov dword [THUNK_EAX], 0
-    ret
 
 .enter:
     ; save flags
@@ -128,7 +107,7 @@ USE16
     mov ss, eax
 
     ; set stack
-    mov esp, THUNK_STACK_ADDR
+    mov esp, 0x7C00 - 64
 
     ; load registers and ES
     pop es
