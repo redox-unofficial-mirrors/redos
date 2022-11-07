@@ -12,6 +12,8 @@ use syscall::Error;
 use crate::{Os, OsKey, OsMemoryKind, OsVideoMode};
 use crate::os::MemoryMapIter;
 
+mod elf;
+
 #[cfg(feature = "rhai")]
 mod rhai;
 
@@ -438,7 +440,7 @@ fn run<
         #[cfg(feature = "rhai")]
         "rhai" => {
             let path_opt = args.next();
-            return rhai::run(state, path_opt, args);
+            return rhai::rhai(state, path_opt, args);
         },
         "rm" | "del" => {
             let mut state = state.lock();
@@ -534,15 +536,21 @@ fn run<
                 }
             }
         }
-        #[cfg(feature = "rhai")]
         _ => {
-            let path = format!("/redos/{}.rhai", cmd);
-            return rhai::run(state, Some(&path), args);
-        },
-        #[cfg(not(feature = "rhai"))]
-        _ => {
+            //TODO: only run if /redos/{}.elf or /redos/{}.rhai exists
+            {
+                let path = format!("/redos/{}.elf", cmd);
+                return elf::elf(state, &path, args);
+            }
+
+            #[cfg(feature = "rhai")]
+            {
+                let path = format!("/redos/{}.rhai", cmd);
+                return rhai::rhai(state, Some(&path), args);
+            }
+
             println!("{}: command not found", cmd);
-        }
+        },
     }
 }
 

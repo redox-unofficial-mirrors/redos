@@ -94,7 +94,7 @@ qemu: $(BUILD)/harddrive.bin
 	$(QEMU) \
 		-d cpu_reset,guest_errors,int \
 		-no-reboot \
-		-smp 1 -m 2 \
+		-smp 1 -m 8 \
 		-chardev stdio,id=debug,signal=off,mux=on \
 		-serial chardev:debug \
 		-mon chardev=debug \

@@ -348,6 +348,7 @@ dependencies = [
  "bitflags",
  "linked_list_allocator",
  "log",
+ "redos_abi",
  "redox_syscall",
  "redox_uefi",
  "redox_uefi_std",
@@ -399,9 +400,9 @@ dependencies = [
 
 [[package]]
 name = "redoxfs"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "065440f333c9be15b59af203be1dbb2f15426c1c3adecf4b59022107a3e28711"
+checksum = "606648649759746316bab6ea0940f88d983e70a6a984b40f8eaa67ff9ff3abf9"
 dependencies = [
  "aes",
  "argon2",

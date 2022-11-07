@@ -22,7 +22,7 @@ fn rhai_err<E: ToString>(err: E) -> Box<rhai::EvalAltResult> {
     err.to_string().into()
 }
 
-pub(crate) fn run<
+pub(crate) fn rhai<
     'i,
     D: Disk + 'static,
     V: Iterator<Item=OsVideoMode>,

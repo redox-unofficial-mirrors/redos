@@ -1,4 +1,4 @@
-ENTRY(main)
+ENTRY(start)
 OUTPUT_FORMAT(elf32-i386)
 
 /* The start address must match redos kernel */
