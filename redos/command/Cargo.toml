@@ -9,3 +9,10 @@ crate-type = ["staticlib"]
 
 [dependencies]
 redos_abi = { path = "../abi" }
+
+[profile.release]
+debug = 2
+lto = "thin" # uefi cannot compile with fat lto
+opt-level = "s"
+panic = "abort"
+split-debuginfo = "packed"

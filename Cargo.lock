@@ -342,6 +342,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "redos_rhai"
+version = "0.1.0"
+dependencies = [
+ "redos_abi",
+ "rhai",
+]
+
+[[package]]
+name = "redos_vi"
+version = "0.1.0"
+dependencies = [
+ "redos_abi",
+]
+
+[[package]]
 name = "redox_bootloader"
 version = "1.0.0"
 dependencies = [

@@ -8,8 +8,10 @@ use core::{
     marker::PhantomData,
     mem,
     ptr,
+    slice,
+    str,
 };
-use redos_abi::Abi;
+use redos_abi::{Abi, AbiData};
 use redoxfs::{Disk, TreePtr};
 use spin::Mutex;
 
@@ -23,8 +25,15 @@ use crate::dos::{
     State
 };
 
-extern "C" fn print(s: &str) {
-    print!("{}", s);
+extern "C" fn abi_print(_data: AbiData, ptr: *const u8, len: usize) {
+    match str::from_utf8(unsafe {
+        slice::from_raw_parts(ptr, len)
+    }) {
+        Ok(s) => print!("{}", s),
+        Err(err) => {
+            //TODO: panic or return error?
+        }
+    }
 }
 
 pub(crate) fn elf<
@@ -73,13 +82,21 @@ pub(crate) fn elf<
         return;
     }
 
-    if is64 {
-        println!("{}: 64-bit executables not supported yet", path);
-        return;
+    if cfg!(target_pointer_width = "64") {
+        if !is64 {
+            println!("{}: 32-bit executables not supported", path);
+            return;
+        }
+    } else {
+        if is64 {
+            println!("{}: 64-bit executables not supported", path);
+            return;
+        }
     }
 
     let abi = Abi {
-        print,
+        abi_data: AbiData(state as *const _ as usize),
+        abi_print,
     };
 
     unsafe {

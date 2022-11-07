@@ -1,0 +1,18 @@
+[package]
+name = "redos_vi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/main.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+redos_abi = { path = "../abi" }
+
+[profile.release]
+debug = 2
+lto = "thin" # uefi cannot compile with fat lto
+opt-level = "s"
+panic = "abort"
+split-debuginfo = "packed"

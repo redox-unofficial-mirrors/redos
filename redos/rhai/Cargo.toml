@@ -1,0 +1,37 @@
+[package]
+name = "redos_rhai"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/main.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+redos_abi = { path = "../abi" }
+
+[dependencies.rhai]
+version = "1.10"
+default-features = false
+features = [
+  "no_std",
+  "no_float", # TODO: can we provide floats?
+  "only_i32", # TODO: fix issues with u128
+  # Size optimizations
+  "no_closure",
+  "no_custom_syntax",
+  #"no_function",
+  #"no_index",
+  "no_module",
+  #"no_object",
+  "no_optimize",
+  #"no_position",
+  "unchecked"
+]
+
+[profile.release]
+debug = 2
+lto = "thin" # uefi cannot compile with fat lto
+opt-level = "s"
+panic = "abort"
+split-debuginfo = "packed"

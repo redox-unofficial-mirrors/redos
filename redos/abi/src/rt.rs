@@ -6,7 +6,7 @@ use crate::Abi;
 
 static mut ABI: *const Abi = ptr::null_mut();
 
-fn abi() -> &'static Abi {
+pub fn abi() -> &'static Abi {
     unsafe { &*ABI }
 }
 
@@ -14,7 +14,7 @@ pub struct AbiPrint;
 
 impl fmt::Write for AbiPrint {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        (abi().print)(s);
+        abi().print(s);
         Ok(())
     }
 }
