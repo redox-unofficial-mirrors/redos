@@ -1,47 +1,20 @@
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-    sync::Arc,
-    vec::Vec,
-};
-use core::marker::PhantomData;
-use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
-use spin::Mutex;
-use syscall::Error;
-
-use crate::{Os, OsKey, OsMemoryKind, OsVideoMode};
-use crate::os::MemoryMapIter;
-use super::{State, read_line, read_node, write_node};
+use alloc::string::{String, ToString};
+use redos_abi::{error::{self, Error}, rt::abi};
 
 fn str_err<E: ToString>(err: E) -> String {
     err.to_string()
 }
 
-pub(crate) fn vi<
-    'i,
-    D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode>,
-    O: Os<D, V> + 'static,
-    I: Iterator<Item=&'i str>,
->(
-    state: &Arc<Mutex<State<D, V, O>>>,
-    args: I
-) -> Result<(), String> {
-    let mut state = state.lock();
-    let args: Vec<_> = args.collect();
+pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
+    let abi = abi();
 
     if args.len() == 0 {
         return Err(str_err("no file provided"))
     }
 
     for arg in args {
-        let fd = state.open(arg).map_err(str_err)?;
-        let mut data = String::from_utf8(
-            state.fs.tx(move |mut tx| {
-                let node = tx.read_tree(TreePtr::new(fd))?;
-                read_node(&mut tx, &node)
-            }).map_err(str_err)?
-        ).map_err(str_err)?;
+        let fd = abi.open(arg).map_err(str_err)?;
+        let mut data = abi.read_to_string(fd).map_err(str_err)?;
 
         let width = 80;
         let height = 25 - 1; // Use last line as status line
@@ -51,7 +24,7 @@ pub(crate) fn vi<
         let mut command = false;
         let mut insert = false;
         loop {
-            state.os.clear_text();
+            abi.text_clear();
 
             // Start of cursor's row
             let mut cursor_row_start = 0;
@@ -93,9 +66,9 @@ pub(crate) fn vi<
                 if row >= scroll && row < scroll + height {
                     if at_cursor {
                         // Highlight if at cursor
-                        state.os.set_text_highlight(true);
+                        abi.text_color(0x70);
                         print!("{}", c);
-                        state.os.set_text_highlight(false);
+                        abi.text_color(0x07);
                     } else {
                         print!("{}", c);
                     }
@@ -148,7 +121,7 @@ pub(crate) fn vi<
             if command {
                 let prompt = ":";
                 print!("{}", prompt);
-                let line = read_line(&mut state.os);
+                let line = abi.read_line();
                 for c in prompt.chars().chain(line.chars()) {
                     print!("\x08 \x08");
                 }
@@ -156,22 +129,12 @@ pub(crate) fn vi<
                 match line.as_str() {
                     "q" => break,
                     "w" =>  {
-                        state.fs.tx(|mut tx| {
-                            let mut node = tx.read_tree(TreePtr::new(fd))?;
-                            if write_node(&mut tx, &mut node, data.as_bytes())? {
-                                tx.sync_tree(node)?;
-                            }
-                            Ok(())
-                        }).map_err(str_err)?;
+                        abi.pwrite(fd, data.as_bytes(), 0).map_err(str_err)?;
+                        abi.truncate(fd, data.len()).map_err(str_err)?;
                     },
                     "x" =>  {
-                        state.fs.tx(|mut tx| {
-                            let mut node = tx.read_tree(TreePtr::new(fd))?;
-                            if write_node(&mut tx, &mut node, data.as_bytes())? {
-                                tx.sync_tree(node)?;
-                            }
-                            Ok(())
-                        }).map_err(str_err)?;
+                        abi.pwrite(fd, data.as_bytes(), 0).map_err(str_err)?;
+                        abi.truncate(fd, data.len()).map_err(str_err)?;
                         break;
                     },
                     _ => (),
@@ -181,7 +144,7 @@ pub(crate) fn vi<
             } else if insert {
                 println!("-- INSERT -- {}, {} in {}, {}", cursor_row, cursor_index_col, row, cursor_row_col);
 
-                let c = state.key();
+                let c = abi.key();
                 match c {
                     // Unknown key
                     '\x00' => {},
@@ -228,7 +191,7 @@ pub(crate) fn vi<
             } else {
                 println!("-- NORMAL -- {}, {} in {}, {}", cursor_row, cursor_index_col, row, cursor_row_col);
 
-                let c = state.key();
+                let c = abi.key();
                 match c {
                     // Unknown key
                     '\x00' => {},

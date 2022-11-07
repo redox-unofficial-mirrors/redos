@@ -11,7 +11,6 @@ use spin::Mutex;
 use crate::{Os, OsKey, OsVideoMode};
 use crate::dos::{
     lookup_node,
-    read_line,
     read_node,
     readdir_node,
     write_node,
@@ -99,7 +98,7 @@ pub(crate) fn rhai<
         let state = state.clone();
         engine.register_fn("prompt", move |prompt: &str| -> String {
             print!("{}", prompt);
-            let line = read_line(&mut state.lock().os);
+            let line = state.lock().read_line();
             for c in prompt.chars().chain(line.chars()) {
                 print!("\x08 \x08");
             }
@@ -198,7 +197,7 @@ pub(crate) fn rhai<
     } else {
         loop {
             print!(">> ");
-            let line = read_line(&mut state.lock().os);
+            let line = state.lock().read_line();
             println!();
 
             if line.as_str() == "exit" {

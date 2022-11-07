@@ -25,13 +25,11 @@ use crate::os::{
     OsVideoMode,
 };
 
-use self::{
-    disk::DiskEfi,
-    display::{EdidActive, Output},
-    video_mode::VideoModeIter,
-};
+use self::display::{EdidActive, Output};
 
+pub use self::disk::DiskEfi as OsDisk;
 pub use self::memory_map::MemoryMapIter;
+pub use self::video_mode::VideoModeIter;
 
 mod acpi;
 mod arch;
@@ -143,7 +141,7 @@ impl OsEfi {
 }
 
 impl Os<
-    DiskEfi,
+    OsDisk,
     VideoModeIter
 > for OsEfi {
     #[cfg(target_arch = "aarch64")]
@@ -164,8 +162,8 @@ impl Os<
         page_size()
     }
 
-    fn filesystem(&self, password_opt: Option<&[u8]>) -> syscall::Result<redoxfs::FileSystem<DiskEfi>> {
-        for block_io in DiskEfi::all().into_iter() {
+    fn filesystem(&self, password_opt: Option<&[u8]>) -> syscall::Result<redoxfs::FileSystem<OsDisk>> {
+        for block_io in OsDisk::all().into_iter() {
             if ! block_io.0.Media.MediaPresent {
                 continue;
             }
@@ -314,10 +312,9 @@ impl Os<
         ).unwrap();
     }
 
-    fn set_text_highlight(&self, highlight: bool) {
-        let attr = if highlight { 0x70 } else { 0x07 };
+    fn set_text_color(&self, color: u8) {
         status_to_result(
-            (self.st.ConsoleOut.SetAttribute)(self.st.ConsoleOut, attr)
+            (self.st.ConsoleOut.SetAttribute)(self.st.ConsoleOut, color)
         ).unwrap();
     }
 }

@@ -3,7 +3,10 @@ name = "redos_abi"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+redox_syscall = "0.2"
+
 [features]
 default = ["alloc", "rt"]
-alloc = []
+alloc = ["rt"]
 rt = []

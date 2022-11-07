@@ -10,14 +10,12 @@ use spin::Mutex;
 use syscall::Error;
 
 use crate::{Os, OsKey, OsMemoryKind, OsVideoMode};
-use crate::os::MemoryMapIter;
+use crate::os::{OsDisk, MemoryMapIter, VideoModeIter};
 
 mod elf;
 
 #[cfg(feature = "rhai")]
 mod rhai;
-
-mod vi;
 
 fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<TreeData<Node>, Error> {
     let mut node = tx.read_tree(TreePtr::root())?;
@@ -83,56 +81,14 @@ fn write_node<D: Disk>(tx: &mut Transaction<D>, node: &mut TreeData<Node>, data:
     Ok(node_changed)
 }
 
-fn read_line<
-    D: Disk,
-    V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>) -> String {
-    let mut line = String::new();
-    loop {
-        // Print cursor
-        os.set_text_highlight(true);
-        print!(" \x08");
-        os.set_text_highlight(false);
 
-        let key = os.get_key();
-
-        // Wipe out cursor
-        print!(" \x08");
-
-        match key {
-            OsKey::Backspace | OsKey::Delete => if ! line.is_empty() {
-                print!("\x08 \x08");
-                line.pop();
-            },
-            OsKey::Char(c) => {
-                print!("{}", c);
-                line.push(c)
-            },
-            OsKey::Enter => {
-                break;
-            },
-            _ => (),
-        }
-    }
-    line
-}
-
-pub(crate) struct State<
-    D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode> + 'static,
-    O: Os<D, V> + 'static,
-> {
-    os: O,
-    fs: FileSystem<D>,
+pub(crate) struct State {
+    os: Box<dyn Os<OsDisk, VideoModeIter>>,
+    fs: FileSystem<OsDisk>,
     cwd: Vec<String>,
-    phantom: PhantomData<V>,
 }
 
-impl<
-    D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode> + 'static,
-    O: Os<D, V> + 'static,
-> State<D, V, O> {
+impl State {
     fn path_parts(&self, path: &str) -> Vec<String> {
         let mut path_parts = if path.starts_with("/") {
             Vec::new()
@@ -153,15 +109,39 @@ impl<
         path_parts
     }
 
-    fn open(&mut self, path: &str) -> Result<u32, Error> {
+    fn open(&mut self, path: &str) -> Result<usize, Error> {
         let path_parts = self.path_parts(path);
         self.fs.tx(move |mut tx| {
             let node = lookup_node(&mut tx, &path_parts)?;
-            Ok(node.ptr().id())
+            Ok(node.ptr().id() as usize)
         })
     }
 
-    fn key(&mut self) -> char {
+    fn pread(&mut self, fd: usize, buf: &mut [u8], offset: usize) -> Result<usize, Error> {
+        self.fs.tx(move |mut tx| {
+            //TODO: time
+            let (atime, atime_nsec) = (0, 0);
+            tx.read_node(TreePtr::new(fd as u32), offset as u64, buf, atime, atime_nsec)
+        })
+    }
+
+    fn pwrite(&mut self, fd: usize, buf: &[u8], offset: usize) -> Result<usize, Error> {
+        self.fs.tx(move |mut tx| {
+            //TODO: time
+            let (mtime, mtime_nsec) = (0, 0);
+            tx.write_node(TreePtr::new(fd as u32), offset as u64, buf, mtime, mtime_nsec)
+        })
+    }
+
+    fn truncate(&mut self, fd: usize, size: usize) -> Result<(), Error> {
+        self.fs.tx(move |mut tx| {
+            //TODO: time
+            let (mtime, mtime_nsec) = (0, 0);
+            tx.truncate_node(TreePtr::new(fd as u32), size as u64, mtime, mtime_nsec)
+        })
+    }
+
+    fn key(&self) -> char {
         match self.os.get_key() {
             OsKey::Left => '\u{2190}',
             OsKey::Right => '\u{2192}',
@@ -174,17 +154,41 @@ impl<
             OsKey::Other => '\0',
         }
     }
+
+    fn read_line(&self) -> String {
+        let mut line = String::new();
+        loop {
+            // Print cursor
+            self.os.set_text_highlight(true);
+            print!(" \x08");
+            self.os.set_text_highlight(false);
+
+            let key = self.os.get_key();
+
+            // Wipe out cursor
+            print!(" \x08");
+
+            match key {
+                OsKey::Backspace | OsKey::Delete => if ! line.is_empty() {
+                    print!("\x08 \x08");
+                    line.pop();
+                },
+                OsKey::Char(c) => {
+                    print!("{}", c);
+                    line.push(c)
+                },
+                OsKey::Enter => {
+                    break;
+                },
+                _ => (),
+            }
+        }
+        line
+    }
 }
 
 
-fn run<
-    D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode>,
-    O: Os<D, V> + 'static,
->(
-    state: &Arc<Mutex<State<D, V, O>>>,
-    line: &str
-) {
+fn run(state: &Arc<Mutex<State>>, line: &str) {
     let mut args = line.split(' ')
         .filter(|x| !x.is_empty());
     let cmd = match args.next() {
@@ -528,14 +532,6 @@ fn run<
                 }
             }
         },
-        "vi" => {
-            match vi::vi(state, args) {
-                Ok(()) => (),
-                Err(err) => {
-                    println!("{}: {}", cmd, err);
-                }
-            }
-        }
         _ => {
             //TODO: only run if /redos/{}.elf or /redos/{}.rhai exists
             {
@@ -555,21 +551,18 @@ fn run<
 }
 
 pub(crate) fn main<
-    D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode> + 'static,
-    O: Os<D, V> + 'static,
+    O: Os<OsDisk, VideoModeIter> + 'static,
 >(
     os: O,
-    fs: FileSystem<D>
+    fs: FileSystem<OsDisk>
 ) -> ! {
     println!("Welcome to ReDOS");
 
     let state = Arc::new(Mutex::new(
         State {
-            os,
+            os: Box::new(os),
             fs,
             cwd: Vec::new(),
-            phantom: PhantomData,
         }
     ));
 
@@ -584,7 +577,7 @@ pub(crate) fn main<
             print!("{}", part);
         }
         print!("# ");
-        let line = read_line(&mut state.lock().os);
+        let line = state.lock().read_line();
         println!();
 
         run(&state, &line);

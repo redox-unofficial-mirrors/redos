@@ -47,8 +47,7 @@ pub unsafe extern "C" fn start(abi: *const Abi) {
 
 /// Required to handle panics
 #[panic_handler]
-#[no_mangle]
-pub extern "C" fn rust_begin_unwind(info: &core::panic::PanicInfo) -> ! {
+fn panic_handler(info: &core::panic::PanicInfo) -> ! {
     unsafe {
         println!("REDOS PANIC:\n{}", info);
         loop {

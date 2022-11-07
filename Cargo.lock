@@ -333,6 +333,9 @@ dependencies = [
 [[package]]
 name = "redos_abi"
 version = "0.1.0"
+dependencies = [
+ "redox_syscall",
+]
 
 [[package]]
 name = "redos_command"

@@ -30,7 +30,7 @@ use core::{
 use redoxfs::Disk;
 
 use self::arch::{paging_create, paging_framebuffer};
-use self::os::{Os, OsKey, OsMemoryEntry, OsMemoryKind, OsVideoMode};
+use self::os::{Os, OsDisk, OsKey, OsMemoryEntry, OsMemoryKind, OsVideoMode, VideoModeIter};
 
 #[macro_use]
 mod os;
@@ -375,9 +375,7 @@ fn elf_entry(data: &[u8]) -> (u64, bool) {
 }
 
 fn main<
-    D: Disk + 'static,
-    V: Iterator<Item=OsVideoMode> + 'static,
-    O: Os<D, V> + 'static,
+    O: Os<OsDisk, VideoModeIter> + 'static,
 >(mut os: O) -> (usize, u64, KernelArgs) {
     println!("Redox OS Bootloader {} on {}", env!("CARGO_PKG_VERSION"), os.name());
 

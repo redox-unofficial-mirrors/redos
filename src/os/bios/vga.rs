@@ -7,36 +7,13 @@ pub struct VgaTextBlock {
     pub color: u8,
 }
 
-#[allow(dead_code)]
-#[derive(Clone, Copy)]
-#[repr(u8)]
-pub enum VgaTextColor {
-    Black = 0,
-    Blue = 1,
-    Green = 2,
-    Cyan = 3,
-    Red = 4,
-    Purple = 5,
-    Brown = 6,
-    Gray = 7,
-    DarkGray = 8,
-    LightBlue = 9,
-    LightGreen = 10,
-    LightCyan = 11,
-    LightRed = 12,
-    LightPurple = 13,
-    Yellow = 14,
-    White = 15,
-}
-
 pub struct Vga {
     pub base: usize,
     pub width: usize,
     pub height: usize,
     pub x: usize,
     pub y: usize,
-    pub bg: VgaTextColor,
-    pub fg: VgaTextColor,
+    pub color: u8,
 }
 
 impl Vga {
@@ -47,8 +24,7 @@ impl Vga {
             height,
             x: 0,
             y: 0,
-            bg: VgaTextColor::Black,
-            fg: VgaTextColor::Gray,
+            color: 0x07,
         }
     }
 
@@ -66,7 +42,7 @@ impl Vga {
         for i in 0..blocks.len() {
             blocks[i] = VgaTextBlock {
                 char: 0,
-                color: ((self.bg as u8) << 4) | (self.fg as u8),
+                color: self.color,
             };
         }
     }
@@ -108,9 +84,7 @@ impl fmt::Write for Vga {
                     let i = self.y * self.width + self.x;
                     if let Some(block) = blocks.get_mut(i) {
                         block.char = c as u8;
-                        block.color =
-                            ((self.bg as u8) << 4) |
-                            (self.fg as u8);
+                        block.color = self.color;
                     }
                     self.x += 1;
                 }

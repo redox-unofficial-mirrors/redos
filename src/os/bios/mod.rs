@@ -10,13 +10,13 @@ use crate::KernelArgs;
 use crate::logger::LOGGER;
 use crate::os::{Os, OsKey, OsVideoMode};
 
-use self::disk::DiskBios;
 use self::memory_map::memory_map;
 use self::thunk::ThunkData;
-use self::vbe::VideoModeIter;
-use self::vga::{VgaTextColor, Vga};
+use self::vga::Vga;
 
+pub use self::disk::DiskBios as OsDisk;
 pub use self::memory_map::MemoryMapIter;
+pub use self::vbe::VideoModeIter;
 
 #[macro_use]
 mod macros;
@@ -56,7 +56,7 @@ pub struct OsBios {
 }
 
 impl Os<
-    DiskBios,
+    OsDisk,
     VideoModeIter
 > for OsBios {
     fn name(&self) -> &str {
@@ -84,8 +84,8 @@ impl Os<
         4096
     }
 
-    fn filesystem(&self, password_opt: Option<&[u8]>) -> syscall::Result<redoxfs::FileSystem<DiskBios>> {
-        let disk = DiskBios::new(u8::try_from(self.boot_disk).unwrap(), self.thunk13);
+    fn filesystem(&self, password_opt: Option<&[u8]>) -> syscall::Result<redoxfs::FileSystem<OsDisk>> {
+        let disk = OsDisk::new(u8::try_from(self.boot_disk).unwrap(), self.thunk13);
 
         //TODO: get block from partition table
         redoxfs::FileSystem::open(disk, password_opt, None, false)
@@ -173,15 +173,9 @@ impl Os<
         vga.y = y;
     }
 
-    fn set_text_highlight(&self, highlight: bool) {
+    fn set_text_color(&self, color: u8) {
         let mut vga = VGA.lock();
-        if highlight {
-            vga.bg = VgaTextColor::Gray;
-            vga.fg = VgaTextColor::Black;
-        } else {
-            vga.bg = VgaTextColor::Black;
-            vga.fg = VgaTextColor::Gray;
-        }
+        vga.color = color;
     }
 }
 

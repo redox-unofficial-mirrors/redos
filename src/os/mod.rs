@@ -79,5 +79,8 @@ pub trait Os<
     fn clear_text(&self);
     fn get_text_position(&self) -> (usize, usize);
     fn set_text_position(&self, x: usize, y: usize);
-    fn set_text_highlight(&self, highlight: bool);
+    fn set_text_color(&self, color: u8);
+    fn set_text_highlight(&self, highlight: bool) {
+        self.set_text_color(if highlight { 0x70 } else { 0x07 });
+    }
 }
