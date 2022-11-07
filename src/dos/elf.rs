@@ -142,8 +142,15 @@ pub(crate) fn elf<
         }
     }
 
+    let mut abi_args = Vec::new();
+    for arg in args {
+        abi_args.push((arg.as_ptr(), arg.len()));
+    }
+    abi_args.push((ptr::null(), 0));
+
     let abi = Abi {
         abi_data: AbiData(state as *const _ as usize),
+        abi_args: abi_args.as_ptr(),
         abi_print,
         abi_text_clear,
         abi_text_color,

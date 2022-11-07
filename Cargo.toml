@@ -27,26 +27,6 @@ version = "0.5.0"
 default-features = false
 features = ["force-soft"]
 
-[dependencies.rhai]
-version = "1.10"
-default-features = false
-features = [
-  "no_std",
-  "no_float", # TODO: can we provide floats?
-  "only_i32", # TODO: fix issues with u128
-  # Size optimizations
-  "no_closure",
-  "no_custom_syntax",
-  #"no_function",
-  #"no_index",
-  "no_module",
-  #"no_object",
-  "no_optimize",
-  #"no_position",
-  "unchecked"
-]
-optional = true
-
 [target.'cfg(target_os = "uefi")'.dependencies]
 redox_uefi = "0.1.5"
 redox_uefi_std = "0.1.7"

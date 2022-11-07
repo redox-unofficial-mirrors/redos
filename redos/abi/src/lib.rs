@@ -27,6 +27,7 @@ pub struct AbiData(pub usize);
 #[repr(C)]
 pub struct Abi {
     pub abi_data: AbiData,
+    pub abi_args: *const (*const u8, usize),
     pub abi_print: extern "C" fn(data: AbiData, ptr: *const u8, len: usize),
     pub abi_text_clear: extern "C" fn(data: AbiData),
     pub abi_text_color: extern "C" fn(data: AbiData, color: u8),
@@ -40,6 +41,25 @@ pub struct Abi {
 }
 
 impl Abi {
+    #[cfg(feature = "alloc")]
+    pub fn args(&self) -> Vec<&'static str> {
+        use core::{slice, str};
+
+        //TODO: need this many unsafes?
+        let mut args = Vec::new();
+        for arg_i in 0..4096 { // TODO: is this a good limit?
+            let (ptr, len) = unsafe { *self.abi_args.add(arg_i) };
+            if ptr.is_null() {
+                break;
+            }
+
+            let slice = unsafe { slice::from_raw_parts(ptr, len) };
+            let arg = str::from_utf8(slice).unwrap();
+            args.push(arg);
+        }
+        args
+    }
+
     pub fn print(&self, s: &str) {
         (self.abi_print)(self.abi_data, s.as_ptr(), s.len());
     }

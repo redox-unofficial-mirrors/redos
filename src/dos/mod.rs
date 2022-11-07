@@ -14,9 +14,6 @@ use crate::os::{OsDisk, MemoryMapIter, VideoModeIter};
 
 mod elf;
 
-#[cfg(feature = "rhai")]
-mod rhai;
-
 fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<TreeData<Node>, Error> {
     let mut node = tx.read_tree(TreePtr::root())?;
     for part in path.iter() {
@@ -441,11 +438,6 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
                 }
             }
         },
-        #[cfg(feature = "rhai")]
-        "rhai" => {
-            let path_opt = args.next();
-            return rhai::rhai(state, path_opt, args);
-        },
         "rm" | "del" => {
             let mut state = state.lock();
             for arg in args {
@@ -537,12 +529,6 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             {
                 let path = format!("/redos/{}.elf", cmd);
                 return elf::elf(state, &path, args);
-            }
-
-            #[cfg(feature = "rhai")]
-            {
-                let path = format!("/redos/{}.rhai", cmd);
-                return rhai::rhai(state, Some(&path), args);
             }
 
             println!("{}: command not found", cmd);
