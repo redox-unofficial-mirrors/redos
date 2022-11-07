@@ -31,7 +31,7 @@ features = [
 
 [profile.release]
 debug = 2
-lto = "thin" # uefi cannot compile with fat lto
+lto = "fat"
 opt-level = "s"
 panic = "abort"
 split-debuginfo = "packed"
