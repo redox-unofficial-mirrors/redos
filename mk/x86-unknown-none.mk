@@ -7,6 +7,7 @@ all: $(BUILD)/bootloader.bin
 
 REDOS_BINS=\
 	$(BUILD)/command.elf \
+	$(BUILD)/date.elf \
 	$(BUILD)/rhai.elf \
 	$(BUILD)/vi.elf
 export REDOS_TARGET=x86-unknown-redos

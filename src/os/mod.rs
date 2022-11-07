@@ -1,3 +1,4 @@
+use redos_abi::AbiTime;
 use redoxfs::Disk;
 
 #[cfg(all(target_arch = "x86", target_os = "none"))]
@@ -83,4 +84,6 @@ pub trait Os<
     fn set_text_highlight(&self, highlight: bool) {
         self.set_text_color(if highlight { 0x70 } else { 0x07 });
     }
+
+    fn time(&self, time: &mut AbiTime);
 }

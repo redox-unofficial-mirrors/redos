@@ -18,6 +18,10 @@ thunk:
     mov dword [.func], .int16_real
     jmp .enter
 
+.int1a:
+    mov dword [.func], .int1a_real
+    jmp .enter
+
 .func: dd 0
 .esp: dd 0
 .cr0: dd 0
@@ -75,6 +79,10 @@ USE16
 
 .int16_real:
     int 0x16
+    ret
+
+.int1a_real:
+    int 0x1a
     ret
 
 .pm16:

@@ -11,7 +11,7 @@ use core::{
     slice,
     str,
 };
-use redos_abi::{Abi, AbiData, error::Error};
+use redos_abi::{Abi, AbiData, AbiTime, error::Error};
 use redoxfs::{Disk, TreePtr};
 use spin::Mutex;
 
@@ -47,6 +47,12 @@ extern "C" fn abi_text_color(data: AbiData, color: u8) {
 extern "C" fn abi_key(data: AbiData) -> char {
     let state = unsafe { abi_state(data) };
     state.lock().key()
+}
+
+extern "C" fn abi_time(data: AbiData, time_ptr: *mut AbiTime) {
+    let state = unsafe { abi_state(data) };
+    let time = unsafe { &mut *time_ptr };
+    state.lock().os.time(time);
 }
 
 extern "C" fn abi_alloc(_data: AbiData, size: usize, align: usize) -> *mut u8 {
@@ -155,6 +161,7 @@ pub(crate) fn elf<
         abi_text_clear,
         abi_text_color,
         abi_key,
+        abi_time,
         abi_alloc,
         abi_dealloc,
         abi_open,

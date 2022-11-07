@@ -345,6 +345,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "redos_date"
+version = "0.1.0"
+dependencies = [
+ "redos_abi",
+]
+
+[[package]]
 name = "redos_rhai"
 version = "0.1.0"
 dependencies = [

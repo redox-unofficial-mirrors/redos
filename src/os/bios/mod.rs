@@ -4,6 +4,7 @@ use core::{
     slice,
 };
 use linked_list_allocator::LockedHeap;
+use redos_abi::AbiTime;
 use spin::Mutex;
 
 use crate::KernelArgs;
@@ -26,6 +27,7 @@ mod memory_map;
 mod panic;
 pub(crate) mod serial;
 mod thunk;
+mod time;
 mod vbe;
 mod vga;
 
@@ -53,6 +55,7 @@ pub struct OsBios {
     thunk13: extern "C" fn(),
     thunk15: extern "C" fn(),
     thunk16: extern "C" fn(),
+    thunk1a: extern "C" fn(),
 }
 
 impl Os<
@@ -177,6 +180,10 @@ impl Os<
         let mut vga = VGA.lock();
         vga.color = color;
     }
+
+    fn time(&self, time: &mut AbiTime) {
+        time::Time { thunk1a: self.thunk1a }.read(time)
+    }
 }
 
 #[no_mangle]
@@ -193,6 +200,7 @@ pub unsafe extern "C" fn start(
     thunk13: extern "C" fn(),
     thunk15: extern "C" fn(),
     thunk16: extern "C" fn(),
+    thunk1a: extern "C" fn(),
 ) -> ! {
     #[cfg(feature = "serial_debug")]
     {
@@ -228,6 +236,7 @@ pub unsafe extern "C" fn start(
         thunk13,
         thunk15,
         thunk16,
+        thunk1a,
     };
 
     let (heap_start, heap_size) = memory_map(os.thunk15)

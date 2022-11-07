@@ -26,6 +26,8 @@ stage3.entry:
     mov esp, 0x70000
 
     ; push arguments
+    mov eax, thunk.int1a
+    push eax
     mov eax, thunk.int16
     push eax
     mov eax, thunk.int15
@@ -102,7 +104,7 @@ kernel:
     ; Bit 31: Paging, Bit 16: write protect kernel, Bit 0: Protected Mode
     or eax, 1 << 31 | 1 << 16 | 1
     mov cr0, eax
-    
+
     ; enable FPU
     ;TODO: move to Rust
     mov eax, cr0
