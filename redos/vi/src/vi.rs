@@ -17,7 +17,7 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
         let mut data = abi.read_to_string(fd).map_err(str_err)?;
 
         let width = 80;
-        let height = 25;
+        let height = 25 - 1; // One line for status line
         let mut scroll = 0;
         let mut cursor_row = 0;
         let mut cursor_col = 0;
@@ -119,7 +119,7 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
 
             // Pad to end of screen
             let mut pad_row = row;
-            while pad_row + 1 < scroll + height {
+            while pad_row < scroll + height {
                 println!();
                 pad_row += 1;
             }
