@@ -1,14 +1,13 @@
-use alloc::alloc::{alloc_zeroed, Layout};
+use alloc::alloc::{alloc_zeroed, GlobalAlloc, Layout};
 use core::{
     convert::TryFrom,
+    ptr::NonNull,
     slice,
 };
-use linked_list_allocator::LockedHeap;
+use linked_list_allocator::Heap;
 use redos_abi::AbiTime;
-use spin::Mutex;
 
 use crate::KernelArgs;
-use crate::logger::LOGGER;
 use crate::os::{Os, OsKey, OsVideoMode};
 
 use self::memory_map::memory_map;
@@ -20,7 +19,7 @@ pub use self::memory_map::MemoryMapIter;
 pub use self::vbe::VideoModeIter;
 
 #[macro_use]
-mod macros;
+pub(crate) mod macros;
 
 mod disk;
 mod memory_map;
@@ -42,12 +41,28 @@ const DISK_ADDRESS_PACKET_ADDR: usize = 0x1398; // 16 bytes, ends at 0x13A7
 const THUNK_STACK_ADDR: usize = 0x7C00; // Grows downwards
 const VGA_ADDR: usize = 0xB8000;
 
-#[global_allocator]
-pub static ALLOCATOR: LockedHeap = LockedHeap::empty();
+pub(crate) static mut HEAP: Heap = Heap::empty();
 
-pub(crate) static VGA: Mutex<Vga> = Mutex::new(
-    unsafe { Vga::new(VGA_ADDR, 80, 25) }
-);
+pub struct Allocator;
+
+unsafe impl GlobalAlloc for Allocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        HEAP
+            .allocate_first_fit(layout)
+            .ok()
+            .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr())
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        HEAP
+            .deallocate(NonNull::new_unchecked(ptr), layout)
+    }
+}
+
+#[global_allocator]
+pub static ALLOCATOR: Allocator = Allocator;
+
+pub(crate) static mut VGA: Vga = unsafe { Vga::new(VGA_ADDR, 80, 25) };
 
 pub struct OsBios {
     boot_disk: usize,
@@ -135,7 +150,7 @@ impl Os<
                 (edid[0x3B] as u32) | (((edid[0x3D] as u32) & 0xF0) << 4),
             ))
         } else {
-            log::warn!("Failed to get VBE EDID: 0x{:X}", { data.eax });
+            println!("Failed to get VBE EDID: 0x{:X}", { data.eax });
             None
         }
     }
@@ -160,25 +175,29 @@ impl Os<
     }
 
     fn clear_text(&self) {
-        let mut vga = VGA.lock();
-        vga.clear();
+        unsafe {
+            VGA.clear();
+        }
     }
 
     fn get_text_position(&self) -> (usize, usize) {
-        let vga = VGA.lock();
-        (vga.x, vga.y)
+        unsafe {
+            (VGA.x, VGA.y)
+        }
     }
 
     fn set_text_position(&self, x: usize, y: usize) {
         //TODO: ensure this is inside bounds!
-        let mut vga = VGA.lock();
-        vga.x = x;
-        vga.y = y;
+        unsafe {
+            VGA.x = x;
+            VGA.y = y;
+        }
     }
 
     fn set_text_color(&self, color: u8) {
-        let mut vga = VGA.lock();
-        vga.color = color;
+        unsafe {
+            VGA.color = color;
+        }
     }
 
     fn time(&self, time: &mut AbiTime) {
@@ -202,11 +221,19 @@ pub unsafe extern "C" fn start(
     thunk16: extern "C" fn(),
     thunk1a: extern "C" fn(),
 ) -> ! {
+    let mut os = OsBios {
+        boot_disk,
+        thunk10,
+        thunk13,
+        thunk15,
+        thunk16,
+        thunk1a,
+    };
+
     #[cfg(feature = "serial_debug")]
     {
-        let mut com1 = serial::COM1.lock();
-        com1.init();
-        com1.write(b"SERIAL\n");
+        serial::COM1.init();
+        serial::COM1.write(b"SERIAL\n");
     }
 
     {
@@ -225,24 +252,12 @@ pub unsafe extern "C" fn start(
     }
 
     // Clear screen
-    VGA.lock().clear();
-
-    // Set logger
-    LOGGER.init();
-
-    let mut os = OsBios {
-        boot_disk,
-        thunk10,
-        thunk13,
-        thunk15,
-        thunk16,
-        thunk1a,
-    };
+    VGA.clear();
 
     let (heap_start, heap_size) = memory_map(os.thunk15)
         .expect("No memory for heap");
 
-    ALLOCATOR.lock().init(heap_start, heap_size);
+    HEAP.init(heap_start as *mut u8, heap_size);
 
     let (page_phys, func, args) = crate::main(os);
 

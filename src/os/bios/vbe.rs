@@ -1,5 +1,4 @@
 use core::ptr;
-use log::error;
 
 use crate::os::OsVideoMode;
 
@@ -89,7 +88,7 @@ impl VideoModeIter {
             let card_info = unsafe { ptr::read(VBE_CARD_INFO_ADDR as *const VbeCardInfo) };
             unsafe { card_info.videomodeptr.as_ptr::<u16>() }
         } else {
-            error!("Failed to read VBE card info: 0x{:04X}", { data.eax });
+            println!("Failed to read VBE card info: 0x{:04X}", { data.eax });
             ptr::null()
         };
         Self {
@@ -141,7 +140,7 @@ impl Iterator for VideoModeIter {
                     base: mode_info.physbaseptr as u64,
                 });
             } else {
-                error!("Failed to read VBE mode 0x{:04X} info: 0x{:04X}", mode, { data.eax });
+                println!("Failed to read VBE mode 0x{:04X} info: 0x{:04X}", mode, { data.eax });
             }
         }
     }

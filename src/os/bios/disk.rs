@@ -239,7 +239,7 @@ impl Disk for DiskBios {
     }
 
     fn size(&mut self) -> Result<u64> {
-        log::error!("DiskBios::size not implemented");
+        println!("DiskBios::size not implemented");
         Err(Error::new(EIO))
     }
 }

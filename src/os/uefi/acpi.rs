@@ -81,7 +81,7 @@ pub(crate) fn find_acpi_table_pointers<
                 rsdps_area.extend(unsafe { core::slice::from_raw_parts(address as *const u8, length) });
                 rsdps_area.resize(((rsdps_area.len() + (align - 1)) / align) * align, 0u8);
             }
-            Err(_) => log::warn!("Found RSDP that was not valid at {:p}", address as *const u8),
+            Err(_) => println!("Found RSDP that was not valid at {:p}", address as *const u8),
         }
     }
 

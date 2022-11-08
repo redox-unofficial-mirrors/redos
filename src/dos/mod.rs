@@ -1,12 +1,14 @@
 use alloc::{
     boxed::Box,
+    rc::Rc,
     string::{String, ToString},
-    sync::Arc,
     vec::Vec,
 };
-use core::marker::PhantomData;
+use core::{
+    cell::RefCell,
+    marker::PhantomData,
+};
 use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
-use spin::Mutex;
 use syscall::Error;
 
 use crate::{Os, OsKey, OsMemoryKind, OsVideoMode};
@@ -185,7 +187,7 @@ impl State {
 }
 
 
-fn run(state: &Arc<Mutex<State>>, line: &str) {
+fn run(state: &Rc<RefCell<State>>, line: &str) {
     let mut args = line.split(' ')
         .filter(|x| !x.is_empty());
     let cmd = match args.next() {
@@ -197,7 +199,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
         "call" => {
             for arg in args {
                 let string = {
-                    let mut state = state.lock();
+                    let mut state = state.borrow_mut();
 
                     let path = state.path_parts(arg);
 
@@ -229,7 +231,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             }
         },
         "cat" | "type" => {
-            let mut state = state.lock();
+            let mut state = state.borrow_mut();
             for arg in args {
                 let path = state.path_parts(arg);
 
@@ -266,7 +268,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
                 return;
             }
 
-            let mut state = state.lock();
+            let mut state = state.borrow_mut();
 
             let path = state.path_parts(arg);
 
@@ -286,7 +288,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             }
         },
         "clear" | "cls" => {
-            state.lock().os.clear_text();
+            state.borrow_mut().os.clear_text();
         },
         "echo" => {
             for (i, arg) in args.enumerate() {
@@ -303,7 +305,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
                 args.push(".");
             }
 
-            let mut state = state.lock();
+            let mut state = state.borrow_mut();
             for (i, arg) in args.iter().enumerate() {
                 if args.len() > 1 {
                     if i > 0 {
@@ -355,7 +357,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             let mut free = 0;
             let mut reserved = 0;
             let mut total = 0;
-            for area in state.lock().os.memory_map() {
+            for area in state.borrow_mut().os.memory_map() {
                 print!("{:08x} {:08x} ", area.base, area.base + area.size);
                 print_size(area.size);
                 println!(" {:?}", area.kind);
@@ -372,11 +374,11 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             }
 
             #[cfg(all(target_arch = "x86", target_os = "none"))]
-            {
-                use crate::os::ALLOCATOR;
+            unsafe {
+                use crate::os::HEAP;
 
                 let stack: u32;
-                unsafe { core::arch::asm!("mov {}, esp", out(reg) stack); }
+                core::arch::asm!("mov {}, esp", out(reg) stack);
                 println!("Stack pointer: {:#x}", stack);
 
                 print!("Stack used: ");
@@ -384,15 +386,15 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
                 println!();
 
                 print!("Heap free: ");
-                print_size(ALLOCATOR.lock().free() as u64);
+                print_size(HEAP.free() as u64);
                 println!();
 
                 print!("Heap used: ");
-                print_size(ALLOCATOR.lock().used() as u64);
+                print_size(HEAP.used() as u64);
                 println!();
 
                 print!("Heap size: ");
-                print_size(ALLOCATOR.lock().size() as u64);
+                print_size(HEAP.size() as u64);
                 println!();
             }
 
@@ -409,7 +411,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             println!();
         },
         "mkdir" | "md" => {
-            let mut state = state.lock();
+            let mut state = state.borrow_mut();
             for arg in args {
                 let mut path = state.path_parts(arg);
                 let name = match path.pop() {
@@ -439,7 +441,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             }
         },
         "rm" | "del" => {
-            let mut state = state.lock();
+            let mut state = state.borrow_mut();
             for arg in args {
                 let mut path = state.path_parts(arg);
                 let name = match path.pop() {
@@ -467,7 +469,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             }
         },
         "rmdir" | "rd" => {
-            let mut state = state.lock();
+            let mut state = state.borrow_mut();
             for arg in args {
                 let mut path = state.path_parts(arg);
                 let name = match path.pop() {
@@ -495,7 +497,7 @@ fn run(state: &Arc<Mutex<State>>, line: &str) {
             }
         },
         "touch" => {
-            let mut state = state.lock();
+            let mut state = state.borrow_mut();
             for arg in args {
                 let mut path = state.path_parts(arg);
                 let name = match path.pop() {
@@ -542,7 +544,7 @@ pub(crate) fn main<
     os: O,
     fs: FileSystem<OsDisk>
 ) -> ! {
-    let state = Arc::new(Mutex::new(
+    let state = Rc::new(RefCell::new(
         State {
             os: Box::new(os),
             fs,
@@ -554,14 +556,14 @@ pub(crate) fn main<
 
     loop {
         print!("/");
-        for (i, part) in state.lock().cwd.iter().enumerate() {
+        for (i, part) in state.borrow_mut().cwd.iter().enumerate() {
             if i > 0 {
                 print!("/");
             }
             print!("{}", part);
         }
         print!("# ");
-        let line = state.lock().read_line();
+        let line = state.borrow_mut().read_line();
         println!();
 
         run(&state, &line);

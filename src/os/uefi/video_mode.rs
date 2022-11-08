@@ -1,5 +1,4 @@
 use core::{ops::{ControlFlow, Try}, ptr};
-use log::error;
 use std::proto::Protocol;
 
 use crate::os::OsVideoMode;
@@ -32,7 +31,7 @@ impl Iterator for VideoModeIter {
                 match (output.0.QueryMode)(output.0, id, &mut mode_size, &mut mode_ptr).branch() {
                     ControlFlow::Continue(_) => (),
                     ControlFlow::Break(err) => {
-                        error!("Failed to read mode {}: {:?}", id, err);
+                        println!("Failed to read mode {}: {:?}", id, err);
                         continue;
                     }
                 }

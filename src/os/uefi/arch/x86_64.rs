@@ -8,7 +8,6 @@ use x86::{
 use crate::{
     KernelArgs,
     Os,
-    logger::LOGGER,
 };
 
 use super::super::{
@@ -74,8 +73,6 @@ unsafe extern "C" fn kernel_entry(
 }
 
 pub fn main() -> Result<()> {
-    LOGGER.init();
-
     let mut os = OsEfi::new();
 
     // Disable cursor

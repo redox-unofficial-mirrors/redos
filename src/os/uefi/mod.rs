@@ -116,20 +116,20 @@ impl OsEfi {
                                     match EdidActive::handle_protocol(handle) {
                                         Ok(efi_edid) => Some(efi_edid),
                                         Err(err) => {
-                                            log::warn!("Failed to get EFI EDID from handle {:?}: {:?}", handle, err);
+                                            println!("Failed to get EFI EDID from handle {:?}: {:?}", handle, err);
                                             None
                                         }
                                     }
                                 ));
                             },
                             Err(err) => {
-                                log::warn!("Failed to get Output from handle {:?}: {:?}", handle, err);
+                                println!("Failed to get Output from handle {:?}: {:?}", handle, err);
                             }
                         }
                     }
                 },
                 Err(err) => {
-                    log::warn!("Failed to locate Outputs: {:?}", err);
+                    println!("Failed to locate Outputs: {:?}", err);
                 }
             }
         }
@@ -176,7 +176,7 @@ impl Os<
                         syscall::ENOENT => (),
                         // Print any other errors
                         _ => {
-                            log::warn!("BlockIo error: {:?}", err);
+                            println!("BlockIo error: {:?}", err);
                         }
                     }
                 }
@@ -189,7 +189,7 @@ impl Os<
                         syscall::ENOENT => (),
                         // Print any other errors
                         _ => {
-                            log::warn!("BlockIo error: {:?}", err);
+                            println!("BlockIo error: {:?}", err);
                         }
                     }
                 }
@@ -247,7 +247,7 @@ impl Os<
                     (edid[0x3B] as u32) | (((edid[0x3D] as u32) & 0xF0) << 4),
                 ));
             } else {
-                log::warn!("EFI EDID too small: {}", edid.len());
+                println!("EFI EDID too small: {}", edid.len());
             }
         }
 

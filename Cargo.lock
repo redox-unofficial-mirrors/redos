@@ -243,22 +243,9 @@ checksum = "292a948cd991e376cf75541fe5b97a1081d713c618b4f1b9500f8844e49eb565"
 
 [[package]]
 name = "linked_list_allocator"
-version = "0.9.1"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "549ce1740e46b291953c4340adcd74c59bcf4308f4cac050fd33ba91b7168f4a"
-dependencies = [
- "spinning_top",
-]
-
-[[package]]
-name = "lock_api"
-version = "0.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "435011366fe56583b16cf956f9df0095b405b82d76425bc8981c0e22e60ec4df"
-dependencies = [
- "autocfg",
- "scopeguard",
-]
+checksum = "e322f259d225fbae43a1b053b2dc6a5968a6bdf8b205f5de684dab485b95030e"
 
 [[package]]
 name = "log"
@@ -372,13 +359,11 @@ version = "1.0.0"
 dependencies = [
  "bitflags",
  "linked_list_allocator",
- "log",
  "redos_abi",
  "redox_syscall",
  "redox_uefi",
  "redox_uefi_std",
  "redoxfs",
- "spin",
  "x86",
 ]
 
@@ -424,15 +409,14 @@ dependencies = [
 
 [[package]]
 name = "redoxfs"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "606648649759746316bab6ea0940f88d983e70a6a984b40f8eaa67ff9ff3abf9"
+checksum = "e456ed1c1c7ed5fd37cf8b32cc56b59caaf6593560474081b7f98e49f2219de8"
 dependencies = [
  "aes",
  "argon2",
  "base64ct",
  "libc",
- "log",
  "redox_simple_endian",
  "redox_syscall",
  "seahash",
@@ -470,12 +454,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scopeguard"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
-
-[[package]]
 name = "seahash"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -496,24 +474,6 @@ dependencies = [
  "autocfg",
  "static_assertions",
  "version_check",
-]
-
-[[package]]
-name = "spin"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6002a767bff9e83f8eeecf883ecb8011875a21ae8da43bffb817a57e78cc09"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
-name = "spinning_top"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75adad84ee84b521fb2cca2d4fd0f1dab1d8d026bda3c5bea4ca63b5f9f9293c"
-dependencies = [
- "lock_api",
 ]
 
 [[package]]

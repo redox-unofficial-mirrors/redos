@@ -8,8 +8,8 @@ all: $(BUILD)/bootloader.bin
 REDOS_BINS=\
 	$(BUILD)/command.elf \
 	$(BUILD)/date.elf \
-	$(BUILD)/rhai.elf \
 	$(BUILD)/vi.elf
+#TODO $(BUILD)/rhai.elf (needs atomic cas)
 export REDOS_TARGET=x86-unknown-redos
 
 $(BUILD)/lib%.a: redos/%/src/main.rs Cargo.lock $(shell find redos/* -type f)
@@ -35,7 +35,7 @@ $(BUILD)/%.elf: $(BUILD)/lib%.a linkers/$(REDOS_TARGET).ld
 		-T linkers/$(REDOS_TARGET).ld \
 		-o $@ \
 		$<
-	$(OBJCOPY) --only-keep-debug $@ $@.sym
+	cp $@ $@.sym
 	$(OBJCOPY) --strip-all $@
 
 $(BUILD)/libbootloader.a: Cargo.lock Cargo.toml $(shell find src -type f)
@@ -52,8 +52,8 @@ $(BUILD)/libbootloader.a: Cargo.lock Cargo.toml $(shell find src -type f)
 
 $(BUILD)/bootloader.elf: linkers/$(TARGET).ld $(BUILD)/libbootloader.a
 	mkdir -p $(BUILD)
-	$(LD) -m elf_i386 --gc-sections -z max-page-size=0x1000 -T $< -o $@ $(BUILD)/libbootloader.a && \
-	$(OBJCOPY) --only-keep-debug $@ $@.sym && \
+	$(LD) -m elf_i386 --gc-sections -z max-page-size=0x1000 -T $< -o $@ $(BUILD)/libbootloader.a
+	cp $@ $@.sym
 	$(OBJCOPY) --strip-all $@
 
 $(BUILD)/bootloader.bin: $(BUILD)/bootloader.elf $(shell find asm/$(TARGET) -type f)
@@ -76,7 +76,7 @@ $(BUILD)/libbootloader-live.a: Cargo.lock Cargo.toml $(shell find src -type f)
 $(BUILD)/bootloader-live.elf: linkers/$(TARGET).ld $(BUILD)/libbootloader-live.a
 	mkdir -p $(BUILD)
 	$(LD) -m elf_i386 --gc-sections -z max-page-size=0x1000 -T $< -o $@ $(BUILD)/libbootloader-live.a && \
-	$(OBJCOPY) --only-keep-debug $@ $@.sym && \
+	cp $@ $@.sym && \
 	$(OBJCOPY) --strip-all $@
 
 $(BUILD)/bootloader-live.bin: $(BUILD)/bootloader-live.elf $(shell find asm/$(TARGET) -type f)

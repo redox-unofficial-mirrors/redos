@@ -1,10 +1,11 @@
 use alloc::{
     boxed::Box,
+    rc::Rc,
     string::{String, ToString},
-    sync::Arc,
     vec::Vec,
 };
 use core::{
+    cell::RefCell,
     marker::PhantomData,
     mem,
     ptr,
@@ -13,7 +14,6 @@ use core::{
 };
 use redos_abi::{Abi, AbiData, AbiTime, error::Error};
 use redoxfs::{Disk, TreePtr};
-use spin::Mutex;
 
 use crate::{Os, OsKey, OsVideoMode};
 use crate::dos::{
@@ -24,8 +24,8 @@ use crate::dos::{
     State
 };
 
-unsafe fn abi_state(data: AbiData) -> &'static Arc<Mutex<State>> {
-    &*(data.0 as *const Arc<Mutex<State>>)
+unsafe fn abi_state(data: AbiData) -> &'static Rc<RefCell<State>> {
+    &*(data.0 as *const Rc<RefCell<State>>)
 }
 
 extern "C" fn abi_print(_data: AbiData, ptr: *const u8, len: usize) {
@@ -36,23 +36,23 @@ extern "C" fn abi_print(_data: AbiData, ptr: *const u8, len: usize) {
 
 extern "C" fn abi_text_clear(data: AbiData) {
     let state = unsafe { abi_state(data) };
-    state.lock().os.clear_text();
+    state.borrow_mut().os.clear_text();
 }
 
 extern "C" fn abi_text_color(data: AbiData, color: u8) {
     let state = unsafe { abi_state(data) };
-    state.lock().os.set_text_color(color);
+    state.borrow_mut().os.set_text_color(color);
 }
 
 extern "C" fn abi_key(data: AbiData) -> char {
     let state = unsafe { abi_state(data) };
-    state.lock().key()
+    state.borrow_mut().key()
 }
 
 extern "C" fn abi_time(data: AbiData, time_ptr: *mut AbiTime) {
     let state = unsafe { abi_state(data) };
     let time = unsafe { &mut *time_ptr };
-    state.lock().os.time(time);
+    state.borrow_mut().os.time(time);
 }
 
 extern "C" fn abi_alloc(_data: AbiData, size: usize, align: usize) -> *mut u8 {
@@ -71,7 +71,7 @@ extern "C" fn abi_open(data: AbiData, ptr: *const u8, len: usize) -> usize {
     let state = unsafe { abi_state(data) };
     let slice = unsafe { slice::from_raw_parts(ptr, len) };
     Error::mux(match str::from_utf8(slice) {
-        Ok(path) => state.lock().open(path),
+        Ok(path) => state.borrow_mut().open(path),
         Err(_err) => Err(Error::new(syscall::EINVAL))
     })
 }
@@ -79,38 +79,38 @@ extern "C" fn abi_open(data: AbiData, ptr: *const u8, len: usize) -> usize {
 extern "C" fn abi_pread(data: AbiData, fd: usize, ptr: *mut u8, len: usize, offset: usize) -> usize {
     let state = unsafe { abi_state(data) };
     let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
-    Error::mux(state.lock().pread(fd, slice, offset))
+    Error::mux(state.borrow_mut().pread(fd, slice, offset))
 }
 
 extern "C" fn abi_pwrite(data: AbiData, fd: usize, ptr: *const u8, len: usize, offset: usize) -> usize {
     let state = unsafe { abi_state(data) };
     let slice = unsafe { slice::from_raw_parts(ptr, len) };
-    Error::mux(state.lock().pwrite(fd, slice, offset))
+    Error::mux(state.borrow_mut().pwrite(fd, slice, offset))
 }
 
 extern "C" fn abi_truncate(data: AbiData, fd: usize, size: usize) -> usize {
     let state = unsafe { abi_state(data) };
-    Error::mux(state.lock().truncate(fd, size).and(Ok(size)))
+    Error::mux(state.borrow_mut().truncate(fd, size).and(Ok(size)))
 }
 
 pub(crate) fn elf<
     'i,
     I: Iterator<Item=&'i str>,
 >(
-    state: &Arc<Mutex<State>>,
+    state: &Rc<RefCell<State>>,
     path: &str,
     args: I
 ) {
     let mut path_parts = if path.starts_with("/") {
         Vec::new()
     } else {
-        state.lock().cwd.clone()
+        state.borrow_mut().cwd.clone()
     };
     for part in path.split("/").filter(|x| !x.is_empty()) {
         path_parts.push(part.to_string());
     }
 
-    let data = match state.lock().fs.tx(|mut tx| {
+    let data = match state.borrow_mut().fs.tx(|mut tx| {
         let node = lookup_node(&mut tx, &path_parts)?;
         read_node(&mut tx, &node)
     }) {

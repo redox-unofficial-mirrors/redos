@@ -36,7 +36,6 @@ use self::os::{Os, OsDisk, OsKey, OsMemoryEntry, OsMemoryKind, OsVideoMode, Vide
 mod os;
 
 mod arch;
-mod logger;
 mod serial_16550;
 
 #[cfg(feature = "dos")]
