@@ -86,7 +86,7 @@ impl Iterator for MemoryMapIter {
 
 pub unsafe fn memory_map(thunk15: extern "C" fn()) -> Option<(usize, usize)> {
     let mut heap_limits = None;
-    for (i, entry) in MemoryMapIter::new(thunk15).enumerate() {
+    for entry in MemoryMapIter::new(thunk15) {
         let heap_start = 2 * 1024 * 1024;
         if
             { entry.kind } == OsMemoryKind::Free &&
@@ -104,8 +104,6 @@ pub unsafe fn memory_map(thunk15: extern "C" fn()) -> Option<(usize, usize)> {
                 ));
             }
         }
-
-        crate::AREAS[i] = entry;
     }
     heap_limits
 }

@@ -7,7 +7,6 @@ use core::{
 use linked_list_allocator::Heap;
 use redos_abi::AbiTime;
 
-use crate::KernelArgs;
 use crate::os::{Os, OsKey, OsVideoMode};
 
 use self::memory_map::memory_map;
@@ -24,6 +23,7 @@ pub(crate) mod macros;
 mod disk;
 mod memory_map;
 mod panic;
+#[cfg(feature = "serial_debug")]
 pub(crate) mod serial;
 mod thunk;
 mod time;
@@ -207,11 +207,11 @@ impl Os<
 
 #[no_mangle]
 pub unsafe extern "C" fn start(
-    kernel_entry: extern "C" fn(
+    _kernel_entry: extern "C" fn(
         page_table: usize,
         stack: u64,
         func: u64,
-        args: *const KernelArgs,
+        args: *const u8,
         long_mode: usize,
     ) -> !,
     boot_disk: usize,
@@ -221,7 +221,7 @@ pub unsafe extern "C" fn start(
     thunk16: extern "C" fn(),
     thunk1a: extern "C" fn(),
 ) -> ! {
-    let mut os = OsBios {
+    let os = OsBios {
         boot_disk,
         thunk10,
         thunk13,
@@ -259,17 +259,5 @@ pub unsafe extern "C" fn start(
 
     HEAP.init(heap_start as *mut u8, heap_size);
 
-    let (page_phys, func, args) = crate::main(os);
-
-    kernel_entry(
-        page_phys,
-        args.stack_base + args.stack_size + if crate::KERNEL_64BIT {
-            crate::arch::x64::PHYS_OFFSET as u64
-        } else {
-            crate::arch::x32::PHYS_OFFSET as u64
-        },
-        func,
-        &args,
-        if crate::KERNEL_64BIT { 1 } else { 0 },
-    );
+    crate::main(os)
 }

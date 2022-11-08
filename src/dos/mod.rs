@@ -7,13 +7,12 @@ use alloc::{
 };
 use core::{
     cell::RefCell,
-    marker::PhantomData,
 };
 use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
 use syscall::Error;
 
-use crate::{Os, OsKey, OsMemoryKind, OsVideoMode};
-use crate::os::{OsDisk, MemoryMapIter, VideoModeIter};
+use crate::{Os, OsKey, OsMemoryKind};
+use crate::os::{OsDisk, VideoModeIter};
 
 mod elf;
 
@@ -63,25 +62,6 @@ fn readdir_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Resu
     Ok(children)
 }
 
-fn write_node<D: Disk>(tx: &mut Transaction<D>, node: &mut TreeData<Node>, data: &[u8]) -> Result<bool, Error> {
-    if node.data().is_dir() {
-        return Err(Error::new(syscall::EISDIR));
-    }
-
-    let mut node_changed = tx.truncate_node_inner(node, 0)?;
-
-    let mut offset = 0;
-    while offset < data.len() as u64 {
-        let slice = &data[offset as usize..];
-        if tx.write_node_inner(node, &mut offset, slice)? {
-            node_changed = true;
-        }
-    }
-
-    Ok(node_changed)
-}
-
-
 pub(crate) struct State {
     os: Box<dyn Os<OsDisk, VideoModeIter>>,
     fs: FileSystem<OsDisk>,
@@ -119,7 +99,7 @@ impl State {
     }
 
     fn pread(&mut self, fd: usize, buf: &mut [u8], offset: usize) -> Result<usize, Error> {
-        self.fs.tx(move |mut tx| {
+        self.fs.tx(move |tx| {
             //TODO: time
             let (atime, atime_nsec) = (0, 0);
             tx.read_node(TreePtr::new(fd as u32), offset as u64, buf, atime, atime_nsec)
@@ -127,7 +107,7 @@ impl State {
     }
 
     fn pwrite(&mut self, fd: usize, buf: &[u8], offset: usize) -> Result<usize, Error> {
-        self.fs.tx(move |mut tx| {
+        self.fs.tx(move |tx| {
             //TODO: time
             let (mtime, mtime_nsec) = (0, 0);
             tx.write_node(TreePtr::new(fd as u32), offset as u64, buf, mtime, mtime_nsec)
@@ -135,7 +115,7 @@ impl State {
     }
 
     fn truncate(&mut self, fd: usize, size: usize) -> Result<(), Error> {
-        self.fs.tx(move |mut tx| {
+        self.fs.tx(move |tx| {
             //TODO: time
             let (mtime, mtime_nsec) = (0, 0);
             tx.truncate_node(TreePtr::new(fd as u32), size as u64, mtime, mtime_nsec)
@@ -605,7 +585,7 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                 return elf::elf(state, &path, args);
             }
 
-            println!("{}: command not found", cmd);
+            //println!("{}: command not found", cmd);
         },
     }
 }

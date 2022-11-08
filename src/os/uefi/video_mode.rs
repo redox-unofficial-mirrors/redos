@@ -1,5 +1,4 @@
 use core::{ops::{ControlFlow, Try}, ptr};
-use std::proto::Protocol;
 
 use crate::os::OsVideoMode;
 use crate::os::uefi::display::Output;

@@ -1,26 +1,20 @@
 use alloc::{
-    boxed::Box,
     rc::Rc,
-    string::{String, ToString},
+    string::ToString,
     vec::Vec,
 };
 use core::{
     cell::RefCell,
-    marker::PhantomData,
     mem,
     ptr,
     slice,
     str,
 };
 use redos_abi::{Abi, AbiData, AbiTime, error::Error};
-use redoxfs::{Disk, TreePtr};
 
-use crate::{Os, OsKey, OsVideoMode};
 use crate::dos::{
     lookup_node,
     read_node,
-    readdir_node,
-    write_node,
     State
 };
 

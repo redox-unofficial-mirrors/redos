@@ -109,7 +109,7 @@ impl Disk for DiskBios {
                 chunk.len() as u64 / BLOCK_SIZE
             );
 
-            if let Some((c_max, h_max, s_max)) = self.chs_opt {
+            if let Some((_c_max, h_max, s_max)) = self.chs_opt {
                 let s = (dap.address % s_max as u64) + 1;
                 assert!(s <= 63, "invalid sector {}", s);
 
@@ -186,7 +186,7 @@ impl Disk for DiskBios {
 
             ptr::copy(chunk.as_ptr(), DISK_BIOS_ADDR as *mut u8, chunk.len());
 
-            if let Some((c_max, h_max, s_max)) = self.chs_opt {
+            if let Some((_c_max, h_max, s_max)) = self.chs_opt {
                 let s = (dap.address % s_max as u64) + 1;
                 assert!(s <= 63, "invalid sector {}", s);
 

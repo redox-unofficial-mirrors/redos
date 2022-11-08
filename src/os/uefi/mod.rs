@@ -6,13 +6,13 @@ use core::{
     ptr,
     slice
 };
+use redos_abi::AbiTime;
 use std::{
     proto::Protocol,
 };
 use uefi::{
     Handle,
     boot::LocateSearchType,
-    reset::ResetType,
     memory::MemoryType,
     status::{Result, Status},
     system::SystemTable,
@@ -31,11 +31,8 @@ pub use self::disk::DiskEfi as OsDisk;
 pub use self::memory_map::MemoryMapIter;
 pub use self::video_mode::VideoModeIter;
 
-mod acpi;
-mod arch;
 mod disk;
 mod display;
-mod dtb;
 mod memory_map;
 mod video_mode;
 
@@ -97,16 +94,12 @@ impl OsEfi {
                         //TODO: do we have to query all modes to get good edid?
                         match Output::handle_protocol(handle) {
                             Ok(output) => {
-                                log::debug!("Output {:?} at {:x}", handle, output.0.Mode.FrameBufferBase);
-
                                 if output.0.Mode.FrameBufferBase == 0 {
-                                    log::debug!("Skipping output with frame buffer base of 0");
                                     continue 'handles;
                                 }
 
                                 for other_output in outputs.iter() {
                                     if output.0.Mode.FrameBufferBase == other_output.0.0.Mode.FrameBufferBase {
-                                        log::debug!("Skipping output with frame buffer base matching another output");
                                         continue 'handles;
                                     }
                                 }
@@ -314,8 +307,22 @@ impl Os<
 
     fn set_text_color(&self, color: u8) {
         status_to_result(
-            (self.st.ConsoleOut.SetAttribute)(self.st.ConsoleOut, color)
+            (self.st.ConsoleOut.SetAttribute)(self.st.ConsoleOut, color as usize)
         ).unwrap();
+    }
+
+    fn time(&self, time: &mut AbiTime) {
+        let mut uefi_time = uefi::time::Time::default();
+        status_to_result(
+            (self.st.RuntimeServices.GetTime)(&mut uefi_time, ptr::null_mut())
+        ).unwrap();
+        time.year = uefi_time.Year;
+        time.month = uefi_time.Month;
+        time.day = uefi_time.Day;
+        time.hour = uefi_time.Hour;
+        time.minute = uefi_time.Minute;
+        time.second = uefi_time.Second;
+        time.nanosecond = uefi_time.Nanosecond;
     }
 }
 
@@ -360,9 +367,10 @@ pub extern "C" fn main() -> Status {
         println!("Failed to set max mode: {:?}", err);
     }
 
-    if let Err(err) = arch::main() {
-        panic!("App error: {:?}", err);
-    }
+    let os = OsEfi::new();
 
-    (uefi.RuntimeServices.ResetSystem)(ResetType::Cold, Status(0), 0, ptr::null());
+    // Disable cursor
+    let _ = (os.st.ConsoleOut.EnableCursor)(os.st.ConsoleOut, false);
+
+    crate::main(os);
 }
