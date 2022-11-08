@@ -1,8 +1,8 @@
 export LD?=ld
 export OBJCOPY?=objcopy
 export PARTED?=parted
-export QEMU?=qemu-system-x86_64
-export REDOS_TARGET=x86-unknown-redos
+export QEMU?=qemu-system-i386
+export REDOS_TARGET=i386-unknown-redos
 
 all: $(BUILD)/bootloader.bin
 
@@ -50,9 +50,9 @@ $(BUILD)/bootloader.elf: linkers/$(TARGET).ld $(BUILD)/libbootloader.a
 	cp $@ $@.sym
 	$(OBJCOPY) --strip-all $@
 
-$(BUILD)/bootloader.bin: $(BUILD)/bootloader.elf $(shell find asm/$(TARGET) -type f)
+$(BUILD)/bootloader.bin: $(BUILD)/bootloader.elf $(shell find asm/x86 -type f)
 	mkdir -p $(BUILD)
-	nasm -f bin -o $@ -l $@.lst -D STAGE3=$< -iasm/$(TARGET)/ asm/$(TARGET)/bootloader.asm
+	nasm -f bin -o $@ -l $@.lst -D STAGE3=$< -iasm/x86/ asm/x86/bootloader.asm
 
 $(BUILD)/libbootloader-live.a: Cargo.lock Cargo.toml $(shell find src -type f)
 	mkdir -p $(BUILD)
@@ -73,9 +73,9 @@ $(BUILD)/bootloader-live.elf: linkers/$(TARGET).ld $(BUILD)/libbootloader-live.a
 	cp $@ $@.sym && \
 	$(OBJCOPY) --strip-all $@
 
-$(BUILD)/bootloader-live.bin: $(BUILD)/bootloader-live.elf $(shell find asm/$(TARGET) -type f)
+$(BUILD)/bootloader-live.bin: $(BUILD)/bootloader-live.elf $(shell find asm/x86 -type f)
 	mkdir -p $(BUILD)
-	nasm -f bin -o $@ -l $@.lst -D STAGE3=$< -iasm/$(TARGET)/ asm/$(TARGET)/bootloader.asm
+	nasm -f bin -o $@ -l $@.lst -D STAGE3=$< -iasm/x86/ asm/x86/bootloader.asm
 
 $(BUILD)/harddrive.bin: $(BUILD)/bootloader.bin $(BUILD)/filesystem.bin
 	mkdir -p $(BUILD)

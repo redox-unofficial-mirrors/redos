@@ -1,1 +1,1 @@
-rm -rfv build/*/*.bin build/*/filesystem && make TARGET=x86-unknown-none qemu
+rm -rfv build/*/*.bin build/*/filesystem && make TARGET=i386-unknown-none qemu

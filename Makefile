@@ -1,4 +1,4 @@
-TARGET?=x86-unknown-none
+TARGET?=i386-unknown-none
 BUILD=build/$(TARGET)
 export RUST_TARGET_PATH=$(CURDIR)/targets
 
