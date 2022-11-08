@@ -6,7 +6,10 @@ REDOS_BINS=\
 	$(BUILD)/date.elf \
 	$(BUILD)/help.elf \
 	$(BUILD)/vi.elf
-#TODO $(BUILD)/rhai.elf (needs atomic cas)
+
+ifneq ($(TARGET),i386-unknown-none)
+REDOS_BINS+=$(BUILD)/rhai.elf # needs atomic cas, so can't build for i386
+endif
 
 include mk/$(TARGET).mk
 
