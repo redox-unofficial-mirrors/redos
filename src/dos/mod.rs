@@ -542,8 +542,6 @@ pub(crate) fn main<
     os: O,
     fs: FileSystem<OsDisk>
 ) -> ! {
-    println!("Welcome to ReDOS");
-
     let state = Arc::new(Mutex::new(
         State {
             os: Box::new(os),
