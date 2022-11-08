@@ -1,5 +1,5 @@
 [package]
-name = "redos_command"
+name = "redos_help"
 version = "0.1.0"
 edition = "2021"
 

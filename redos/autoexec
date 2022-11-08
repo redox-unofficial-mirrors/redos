@@ -1,2 +1,9 @@
 echo Welcome to ReDOS!
-date
+rem Set up DOS aliases
+alias cls clear
+alias del rm
+alias dir ls
+alias edit vi
+alias md mkdir
+alias rd rmdir
+alias type cat

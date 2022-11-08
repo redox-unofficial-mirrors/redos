@@ -325,14 +325,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "redos_command"
+name = "redos_date"
 version = "0.1.0"
 dependencies = [
  "redos_abi",
 ]
 
 [[package]]
-name = "redos_date"
+name = "redos_help"
 version = "0.1.0"
 dependencies = [
  "redos_abi",

@@ -6,8 +6,8 @@ export QEMU?=qemu-system-x86_64
 all: $(BUILD)/bootloader.bin
 
 REDOS_BINS=\
-	$(BUILD)/command.elf \
 	$(BUILD)/date.elf \
+	$(BUILD)/help.elf \
 	$(BUILD)/vi.elf
 #TODO $(BUILD)/rhai.elf (needs atomic cas)
 export REDOS_TARGET=x86-unknown-redos

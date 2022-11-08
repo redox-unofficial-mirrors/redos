@@ -1,5 +1,6 @@
 use alloc::{
     boxed::Box,
+    collections::BTreeMap,
     rc::Rc,
     string::{String, ToString},
     vec::Vec,
@@ -85,6 +86,7 @@ pub(crate) struct State {
     os: Box<dyn Os<OsDisk, VideoModeIter>>,
     fs: FileSystem<OsDisk>,
     cwd: Vec<String>,
+    aliases: BTreeMap<String, Vec<String>>,
 }
 
 impl State {
@@ -186,16 +188,35 @@ impl State {
     }
 }
 
-
-fn run(state: &Rc<RefCell<State>>, line: &str) {
-    let mut args = line.split(' ')
+fn run_line(state: &Rc<RefCell<State>>, line: &str) {
+    let args = line
+        .split(' ')
         .filter(|x| !x.is_empty());
+    run(state, args);
+}
+
+fn run<'i, I: Iterator<Item=&'i str>>(
+    state: &Rc<RefCell<State>>, mut args: I
+) {
     let cmd = match args.next() {
         Some(some) => some,
         None => return,
     };
-
     match cmd.to_lowercase().as_str() {
+        "alias" => {
+            if let Some(name) = args.next() {
+                let alias: Vec<String> = args.map(|x| x.to_string()).collect();
+                state.borrow_mut().aliases.insert(name.to_string(), alias);
+            } else {
+                for (name, alias) in state.borrow_mut().aliases.iter() {
+                    print!("alias {}", name);
+                    for part in alias.iter() {
+                        print!(" {}", part);
+                    }
+                    println!();
+                }
+            }
+        },
         "call" => {
             for arg in args {
                 let string = {
@@ -226,11 +247,11 @@ fn run(state: &Rc<RefCell<State>>, line: &str) {
                 };
 
                 for line in string.lines() {
-                    run(state, line);
+                    run_line(state, line);
                 }
             }
         },
-        "cat" | "type" => {
+        "cat" => {
             let mut state = state.borrow_mut();
             for arg in args {
                 let path = state.path_parts(arg);
@@ -287,7 +308,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str) {
                 }
             }
         },
-        "clear" | "cls" => {
+        "clear" => {
             state.borrow_mut().os.clear_text();
         },
         "echo" => {
@@ -299,7 +320,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str) {
             }
             println!();
         },
-        "ls" | "dir" => {
+        "ls" => {
             let mut args: Vec<_> = args.collect();
             if args.is_empty() {
                 args.push(".");
@@ -410,7 +431,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str) {
             print_size(total);
             println!();
         },
-        "mkdir" | "md" => {
+        "mkdir" => {
             let mut state = state.borrow_mut();
             for arg in args {
                 let mut path = state.path_parts(arg);
@@ -440,7 +461,10 @@ fn run(state: &Rc<RefCell<State>>, line: &str) {
                 }
             }
         },
-        "rm" | "del" => {
+        "rem" => {
+            // Comment
+        },
+        "rm" => {
             let mut state = state.borrow_mut();
             for arg in args {
                 let mut path = state.path_parts(arg);
@@ -468,7 +492,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str) {
                 }
             }
         },
-        "rmdir" | "rd" => {
+        "rmdir" => {
             let mut state = state.borrow_mut();
             for arg in args {
                 let mut path = state.path_parts(arg);
@@ -527,6 +551,28 @@ fn run(state: &Rc<RefCell<State>>, line: &str) {
             }
         },
         _ => {
+            // Look for aliases
+            {
+                let alias_opt = state.borrow_mut().aliases.get(cmd).map(|alias| alias.clone());
+                if let Some(alias) = alias_opt {
+                    let mut line = String::new();
+                    for part in alias {
+                        if ! line.is_empty() {
+                            line.push(' ');
+                        }
+                        line.push_str(&part);
+                    }
+                    for arg in args {
+                        if ! line.is_empty() {
+                            line.push(' ');
+                        }
+                        line.push_str(arg);
+                    }
+                    //TODO: remove recursion!
+                    return run_line(state, &line);
+                }
+            }
+
             //TODO: only run if /redos/{}.elf or /redos/{}.rhai exists
             {
                 let path = format!("/redos/{}.elf", cmd);
@@ -549,10 +595,11 @@ pub(crate) fn main<
             os: Box::new(os),
             fs,
             cwd: Vec::new(),
+            aliases: BTreeMap::new(),
         }
     ));
 
-    run(&state, "call redos/autoexec");
+    run_line(&state, "call redos/autoexec");
 
     loop {
         print!("/");
@@ -566,6 +613,6 @@ pub(crate) fn main<
         let line = state.borrow_mut().read_line();
         println!();
 
-        run(&state, &line);
+        run_line(&state, &line);
     }
 }
