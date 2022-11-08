@@ -188,20 +188,36 @@ impl State {
     }
 }
 
-fn run_line(state: &Rc<RefCell<State>>, line: &str) {
+fn print_size(size: u64) {
+    if size >= 1 << 31 /* 2 GiB */ {
+        print!("{} GiB", size >> 30 /* 1 GiB */);
+    } else if size >= 1 << 21 /* 2 MiB */ {
+        print!("{} MiB", size >> 20 /* 1 MiB */);
+    } else if size >= 1 << 11 /* 2 KiB */ {
+        print!("{} KiB", size >> 10 /* 1 KiB */);
+    } else {
+        print!("{} B", size);
+    }
+}
+
+fn run_line(state: &Rc<RefCell<State>>, line: &str, level: usize) {
     let args = line
         .split(' ')
         .filter(|x| !x.is_empty());
-    run(state, args);
+    run(state, args, level);
 }
 
 fn run<'i, I: Iterator<Item=&'i str>>(
-    state: &Rc<RefCell<State>>, mut args: I
+    state: &Rc<RefCell<State>>, mut args: I, level: usize
 ) {
     let cmd = match args.next() {
         Some(some) => some,
         None => return,
     };
+    if level >= 8 {
+        println!("{}: failed to resolve within recursion limit", cmd);
+        return;
+    }
     match cmd.to_lowercase().as_str() {
         "alias" => {
             if let Some(name) = args.next() {
@@ -247,7 +263,7 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                 };
 
                 for line in string.lines() {
-                    run_line(state, line);
+                    run_line(state, line, level + 1);
                 }
             }
         },
@@ -311,6 +327,24 @@ fn run<'i, I: Iterator<Item=&'i str>>(
         "clear" => {
             state.borrow_mut().os.clear_text();
         },
+        "df" => {
+            let state = state.borrow();
+
+            let total = state.fs.header.size();
+            let free = state.fs.allocator().free() * redoxfs::BLOCK_SIZE;
+
+            print!("Free: ");
+            print_size(free);
+            println!();
+
+            print!("Used: ");
+            print_size(total - free);
+            println!();
+
+            print!("Total: ");
+            print_size(total);
+            println!();
+        },
         "echo" => {
             for (i, arg) in args.enumerate() {
                 if i > 0 {
@@ -318,6 +352,44 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                 }
                 print!("{}", arg);
             }
+            println!();
+        },
+        "free" => {
+            let mut free = 0;
+            let mut used = 0;
+            let mut total = 0;
+            for area in state.borrow_mut().os.memory_map() {
+                match area.kind {
+                    OsMemoryKind::Free => {
+                        free += area.size;
+                    },
+                    _ => {
+                        used += area.size;
+                    },
+                }
+                total += area.size;
+            }
+
+            #[cfg(all(target_arch = "x86", target_os = "none"))]
+            unsafe {
+                use crate::os::HEAP;
+
+                // Adjust values when using BIOS by heap used
+                let heap_used = HEAP.used() as u64;
+                free -= heap_used;
+                used += heap_used;
+            }
+
+            print!("Free: ");
+            print_size(free);
+            println!();
+
+            print!("Used: ");
+            print_size(used);
+            println!();
+
+            print!("Total: ");
+            print_size(total);
             println!();
         },
         "ls" => {
@@ -361,75 +433,6 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                     println!("{}", name);
                 }
             }
-        },
-        "mem" => {
-            let print_size = |size| {
-                if size >= 1 << 31 /* 2 GiB */ {
-                    print!("{} GiB", size >> 30 /* 1 GiB */);
-                } else if size >= 1 << 21 /* 2 MiB */ {
-                    print!("{} MiB", size >> 20 /* 1 MiB */);
-                } else if size >= 1 << 11 /* 2 KiB */ {
-                    print!("{} KiB", size >> 10 /* 1 KiB */);
-                } else {
-                    print!("{} B", size);
-                }
-            };
-
-            let mut free = 0;
-            let mut reserved = 0;
-            let mut total = 0;
-            for area in state.borrow_mut().os.memory_map() {
-                print!("{:08x} {:08x} ", area.base, area.base + area.size);
-                print_size(area.size);
-                println!(" {:?}", area.kind);
-
-                match area.kind {
-                    OsMemoryKind::Free => {
-                        free += area.size;
-                    },
-                    _ => {
-                        reserved += area.size;
-                    },
-                }
-                total += area.size;
-            }
-
-            #[cfg(all(target_arch = "x86", target_os = "none"))]
-            unsafe {
-                use crate::os::HEAP;
-
-                let stack: u32;
-                core::arch::asm!("mov {}, esp", out(reg) stack);
-                println!("Stack pointer: {:#x}", stack);
-
-                print!("Stack used: ");
-                print_size((0x70000 - stack) as u64);
-                println!();
-
-                print!("Heap free: ");
-                print_size(HEAP.free() as u64);
-                println!();
-
-                print!("Heap used: ");
-                print_size(HEAP.used() as u64);
-                println!();
-
-                print!("Heap size: ");
-                print_size(HEAP.size() as u64);
-                println!();
-            }
-
-            print!("Free: ");
-            print_size(free);
-            println!();
-
-            print!("Reserved: ");
-            print_size(reserved);
-            println!();
-
-            print!("Total: ");
-            print_size(total);
-            println!();
         },
         "mkdir" => {
             let mut state = state.borrow_mut();
@@ -520,6 +523,29 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                 }
             }
         },
+        #[cfg(all(target_arch = "x86", target_os = "none"))]
+        "stack" => unsafe {
+            let stack: u32;
+            core::arch::asm!("mov {}, esp", out(reg) stack);
+
+            let top = 0x70000;
+            let bottom = 0x60000;
+            let used = top - stack;
+            let total = top - bottom;
+            let free = total - used;
+
+            print!("Free: ");
+            print_size(free as u64);
+            println!();
+
+            print!("Used: ");
+            print_size(used as u64);
+            println!();
+
+            print!("Total: ");
+            print_size(total as u64);
+            println!();
+        },
         "touch" => {
             let mut state = state.borrow_mut();
             for arg in args {
@@ -569,7 +595,7 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                         line.push_str(arg);
                     }
                     //TODO: remove recursion!
-                    return run_line(state, &line);
+                    return run_line(state, &line, level + 1);
                 }
             }
 
@@ -599,7 +625,7 @@ pub(crate) fn main<
         }
     ));
 
-    run_line(&state, "call redos/autoexec");
+    run_line(&state, "call redos/autoexec", 0);
 
     loop {
         print!("/");
@@ -613,6 +639,6 @@ pub(crate) fn main<
         let line = state.borrow_mut().read_line();
         println!();
 
-        run_line(&state, &line);
+        run_line(&state, &line, 0);
     }
 }
