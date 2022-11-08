@@ -17,7 +17,7 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
         let mut data = abi.read_to_string(fd).map_err(str_err)?;
 
         let width = 80;
-        let height = 25 - 1; // Use last line as status line
+        let height = 25;
         let mut scroll = 0;
         let mut cursor_row = 0;
         let mut cursor_col = 0;
@@ -25,6 +25,12 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
         let mut insert = false;
         loop {
             abi.text_clear();
+
+            // Ensure there is always a trailing newline
+            //TODO: is there a better way to handle this?
+            if ! data.ends_with('\n') {
+                data.push('\n');
+            }
 
             // Start of cursor's row
             let mut cursor_row_start = 0;
@@ -142,12 +148,32 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
 
                 command = false;
             } else if insert {
-                println!("-- INSERT -- {}, {} in {}, {}", cursor_row, cursor_index_col, row, cursor_row_col);
+                println!("-- INSERT -- {}, {} ({}) in {}, {}", cursor_row, cursor_index_col, cursor_col, row, cursor_row_col);
 
                 let c = abi.key();
                 match c {
                     // Unknown key
                     '\x00' => {},
+                    // Remove character before cursor
+                    '\x08' => if cursor_index < data.len() {
+                        let mut before_opt = None;
+                        for (i, _) in data.char_indices() {
+                            if i < cursor_index {
+                                before_opt = Some(i);
+                            } else {
+                                break;
+                            }
+                        }
+                        if let Some(before) = before_opt {
+                            data.remove(before);
+                            if cursor_index_col > 0 {
+                                cursor_col = cursor_index_col - 1;
+                            } else if cursor_row > 0 {
+                                cursor_col = width - 1;
+                                cursor_row -= 1;
+                            }
+                        }
+                    },
                     // Exit insert mode
                     '\x1B' => {
                         cursor_col = cursor_index_col;
@@ -156,12 +182,16 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                         }
                         insert = false;
                     },
+                    // Remove character at cursor
+                    '\x7F' => if cursor_index < data.len() {
+                        data.remove(cursor_index);
+                    },
                     // Left
                     '\u{2190}' => if cursor_index_col > 0 {
                         cursor_col = cursor_index_col - 1;
                     },
                     // Down
-                    '\u{2193}' => if cursor_row < row {
+                    '\u{2193}' => if cursor_row + 1 < row {
                         cursor_row += 1;
                         if cursor_row >= scroll + height {
                             scroll = cursor_row - (height - 1);
@@ -178,13 +208,21 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                     '\u{2192}' => if cursor_index_col < cursor_row_col {
                         cursor_col = cursor_index_col + 1;
                     },
+                    // New line
+                    '\n' | '\r' => {
+                        data.insert(cursor_index, '\n');
+                        cursor_row += 1;
+                        cursor_col = 0;
+                    },
                     // Insert character
                     _  => {
-                        data.insert(cursor_index, c);
-                        cursor_col += 1;
-                        if cursor_col >= width {
-                            cursor_row += 1;
-                            cursor_col = 0;
+                        if ! c.is_control() {
+                            data.insert(cursor_index, c);
+                            cursor_col = cursor_index_col + 1;
+                            if cursor_col >= width {
+                                cursor_row += 1;
+                                cursor_col = 0;
+                            }
                         }
                     },
                 }
@@ -210,12 +248,30 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                     }
                     // Enter insert mode at cursor
                     'i' => insert = true,
+                    // Enter insert mode at start of line
+                    'I' => {
+                        cursor_col = 0;
+                        insert = true;
+                    }
+                    // Create line after and enter insert mode
+                    'o' => {
+                        data.insert(cursor_row_end, '\n');
+                        cursor_col = 0;
+                        cursor_row += 1;
+                        insert = true;
+                    },
+                    // Create line before and enter insert mode
+                    'O' => {
+                        data.insert(cursor_row_start, '\n');
+                        cursor_col = 0;
+                        insert = true;
+                    },
                     // Left
                     '\u{2190}' | 'h' => if cursor_index_col > 0 {
                         cursor_col = cursor_index_col - 1;
                     },
                     // Down
-                    '\u{2193}' | 'j' => if cursor_row < row {
+                    '\u{2193}' | 'j' => if cursor_row + 1 < row {
                         cursor_row += 1;
                         if cursor_row >= scroll + height {
                             scroll = cursor_row - (height - 1);
@@ -237,6 +293,26 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                     // Remove character at cursor
                     'x' => if cursor_index < data.len() {
                         data.remove(cursor_index);
+                    },
+                    // Remove character before cursor
+                    'X' => if cursor_index < data.len() {
+                        let mut before_opt = None;
+                        for (i, _) in data.char_indices() {
+                            if i < cursor_index {
+                                before_opt = Some(i);
+                            } else {
+                                break;
+                            }
+                        }
+                        if let Some(before) = before_opt {
+                            data.remove(before);
+                            if cursor_index_col > 0 {
+                                cursor_col = cursor_index_col - 1;
+                            } else if cursor_row > 0 {
+                                cursor_col = width - 1;
+                                cursor_row -= 1;
+                            }
+                        }
                     },
                     // Enter command mode
                     ':' => command = true,
