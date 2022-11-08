@@ -1,7 +1,34 @@
 export PARTED?=parted
 export QEMU?=qemu-system-x86_64
+export REDOS_TARGET=x86_64-unknown-redos
 
 all: $(BUILD)/bootloader.efi
+
+$(BUILD)/lib%.a: redos/%/src/main.rs Cargo.lock $(shell find redos/* -type f)
+	env | sort
+	mkdir -p $(BUILD)
+	env RUSTFLAGS="-C lto=fat -C soft-float" \
+	cargo rustc \
+		-Z build-std=core,alloc,panic_abort \
+		-Z build-std-features=compiler-builtins-mem,panic_immediate_abort \
+		--target $(REDOS_TARGET) \
+		--lib \
+		--release \
+		--package redos_$* \
+		-- \
+		--emit link=$@
+
+$(BUILD)/%.elf: $(BUILD)/lib%.a linkers/$(REDOS_TARGET).ld
+	mkdir -p $(BUILD)
+	$(LD) \
+		-m elf_x86_64 \
+		--gc-sections \
+		-z max-page-size=0x1000 \
+		-T linkers/$(REDOS_TARGET).ld \
+		-o $@ \
+		$<
+	cp $@ $@.sym
+	$(OBJCOPY) --strip-all $@
 
 $(BUILD)/bootloader.efi: Cargo.lock Cargo.toml $(shell find src -type f)
 	mkdir -p $(BUILD)

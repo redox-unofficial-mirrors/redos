@@ -2,15 +2,9 @@ export LD?=ld
 export OBJCOPY?=objcopy
 export PARTED?=parted
 export QEMU?=qemu-system-x86_64
+export REDOS_TARGET=x86-unknown-redos
 
 all: $(BUILD)/bootloader.bin
-
-REDOS_BINS=\
-	$(BUILD)/date.elf \
-	$(BUILD)/help.elf \
-	$(BUILD)/vi.elf
-#TODO $(BUILD)/rhai.elf (needs atomic cas)
-export REDOS_TARGET=x86-unknown-redos
 
 $(BUILD)/lib%.a: redos/%/src/main.rs Cargo.lock $(shell find redos/* -type f)
 	env | sort

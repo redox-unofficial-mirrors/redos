@@ -2,6 +2,12 @@ TARGET?=x86-unknown-none
 BUILD=build/$(TARGET)
 export RUST_TARGET_PATH=$(CURDIR)/targets
 
+REDOS_BINS=\
+	$(BUILD)/date.elf \
+	$(BUILD)/help.elf \
+	$(BUILD)/vi.elf
+#TODO $(BUILD)/rhai.elf (needs atomic cas)
+
 include mk/$(TARGET).mk
 
 clean:
