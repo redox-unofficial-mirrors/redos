@@ -77,7 +77,7 @@ pub trait Os<
 
     fn get_key(&self) -> OsKey;
 
-    fn clear_text(&self);
+    fn text_clear(&self);
     fn get_text_position(&self) -> (usize, usize);
     fn set_text_position(&self, x: usize, y: usize);
     fn set_text_color(&self, color: u8);

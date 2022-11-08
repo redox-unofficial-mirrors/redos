@@ -43,7 +43,7 @@ pub struct Abi {
     pub abi_print: extern "C" fn(data: AbiData, ptr: *const u8, len: usize),
     pub abi_text_clear: extern "C" fn(data: AbiData),
     pub abi_text_color: extern "C" fn(data: AbiData, color: u8),
-    pub abi_key: extern "C" fn(data: AbiData) -> char,
+    pub abi_key: extern "C" fn(data: AbiData) -> u32,
     pub abi_time: extern "C" fn(data: AbiData, time: *mut AbiTime),
     pub abi_alloc: extern "C" fn(data: AbiData, size: usize, align: usize) -> *mut u8,
     pub abi_dealloc: extern "C" fn(data: AbiData, ptr: *mut u8, size: usize, align: usize),
@@ -86,7 +86,7 @@ impl Abi {
     }
 
     pub fn key(&self) -> char {
-        (self.abi_key)(self.abi_data)
+        char::from_u32((self.abi_key)(self.abi_data)).unwrap()
     }
 
     #[cfg(feature = "alloc")]

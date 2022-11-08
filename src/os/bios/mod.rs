@@ -174,7 +174,7 @@ impl Os<
         }
     }
 
-    fn clear_text(&self) {
+    fn text_clear(&self) {
         unsafe {
             VGA.clear();
         }

@@ -285,7 +285,7 @@ impl Os<
         }
     }
 
-    fn clear_text(&self) {
+    fn text_clear(&self) {
         //TODO: why does this sometimes return InvalidParameter, but otherwise appear to work?
         let _ = status_to_result(
             (self.st.ConsoleOut.ClearScreen)(self.st.ConsoleOut)

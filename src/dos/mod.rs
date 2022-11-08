@@ -1,6 +1,6 @@
 use alloc::{
     boxed::Box,
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     rc::Rc,
     string::{String, ToString},
     vec::Vec,
@@ -11,10 +11,12 @@ use core::{
 use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
 use syscall::Error;
 
-use crate::{Os, OsKey, OsMemoryKind};
+use crate::{Os, OsMemoryKind};
 use crate::os::{OsDisk, VideoModeIter};
+use self::state::State;
 
 mod elf;
+mod state;
 
 fn lookup_node<D: Disk>(tx: &mut Transaction<D>, path: &[String]) -> Result<TreeData<Node>, Error> {
     let mut node = tx.read_tree(TreePtr::root())?;
@@ -62,112 +64,6 @@ fn readdir_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Resu
     Ok(children)
 }
 
-pub(crate) struct State {
-    os: Box<dyn Os<OsDisk, VideoModeIter>>,
-    fs: FileSystem<OsDisk>,
-    cwd: Vec<String>,
-    aliases: BTreeMap<String, Vec<String>>,
-}
-
-impl State {
-    fn path_parts(&self, path: &str) -> Vec<String> {
-        let mut path_parts = if path.starts_with("/") {
-            Vec::new()
-        } else {
-            self.cwd.clone()
-        };
-        for part in path.split("/").filter(|x| !x.is_empty()) {
-            if part == "." {
-                // Ignore, refers to current dir
-            } else if part == ".." {
-                // Parent directory
-                path_parts.pop();
-            } else {
-                // Normal path component
-                path_parts.push(part.to_string());
-            }
-        }
-        path_parts
-    }
-
-    fn open(&mut self, path: &str) -> Result<usize, Error> {
-        let path_parts = self.path_parts(path);
-        self.fs.tx(move |mut tx| {
-            let node = lookup_node(&mut tx, &path_parts)?;
-            Ok(node.ptr().id() as usize)
-        })
-    }
-
-    fn pread(&mut self, fd: usize, buf: &mut [u8], offset: usize) -> Result<usize, Error> {
-        self.fs.tx(move |tx| {
-            //TODO: time
-            let (atime, atime_nsec) = (0, 0);
-            tx.read_node(TreePtr::new(fd as u32), offset as u64, buf, atime, atime_nsec)
-        })
-    }
-
-    fn pwrite(&mut self, fd: usize, buf: &[u8], offset: usize) -> Result<usize, Error> {
-        self.fs.tx(move |tx| {
-            //TODO: time
-            let (mtime, mtime_nsec) = (0, 0);
-            tx.write_node(TreePtr::new(fd as u32), offset as u64, buf, mtime, mtime_nsec)
-        })
-    }
-
-    fn truncate(&mut self, fd: usize, size: usize) -> Result<(), Error> {
-        self.fs.tx(move |tx| {
-            //TODO: time
-            let (mtime, mtime_nsec) = (0, 0);
-            tx.truncate_node(TreePtr::new(fd as u32), size as u64, mtime, mtime_nsec)
-        })
-    }
-
-    fn key(&self) -> char {
-        match self.os.get_key() {
-            OsKey::Left => '\u{2190}',
-            OsKey::Right => '\u{2192}',
-            OsKey::Up => '\u{2191}',
-            OsKey::Down => '\u{2193}',
-            OsKey::Backspace => '\x08',
-            OsKey::Delete => '\x7F',
-            OsKey::Enter => '\n',
-            OsKey::Char(c) => c,
-            OsKey::Other => '\0',
-        }
-    }
-
-    fn read_line(&self) -> String {
-        let mut line = String::new();
-        loop {
-            // Print cursor
-            self.os.set_text_highlight(true);
-            print!(" \x08");
-            self.os.set_text_highlight(false);
-
-            let key = self.os.get_key();
-
-            // Wipe out cursor
-            print!(" \x08");
-
-            match key {
-                OsKey::Backspace | OsKey::Delete => if ! line.is_empty() {
-                    print!("\x08 \x08");
-                    line.pop();
-                },
-                OsKey::Char(c) => {
-                    print!("{}", c);
-                    line.push(c)
-                },
-                OsKey::Enter => {
-                    break;
-                },
-                _ => (),
-            }
-        }
-        line
-    }
-}
-
 fn print_size(size: u64) {
     if size >= 1 << 31 /* 2 GiB */ {
         print!("{} GiB", size >> 30 /* 1 GiB */);
@@ -180,16 +76,10 @@ fn print_size(size: u64) {
     }
 }
 
-fn run_line(state: &Rc<RefCell<State>>, line: &str, level: usize) {
-    let args = line
+fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
+    let mut args = line
         .split(' ')
         .filter(|x| !x.is_empty());
-    run(state, args, level);
-}
-
-fn run<'i, I: Iterator<Item=&'i str>>(
-    state: &Rc<RefCell<State>>, mut args: I, level: usize
-) {
     let cmd = match args.next() {
         Some(some) => some,
         None => return,
@@ -197,6 +87,23 @@ fn run<'i, I: Iterator<Item=&'i str>>(
     if level >= 8 {
         println!("{}: failed to resolve within recursion limit", cmd);
         return;
+    }
+    if level == 0 {
+        let mut state = state.borrow_mut();
+        let found = if let Some(last) = state.history.back() {
+            last == line
+        } else {
+            false
+        };
+        if ! found {
+            // Truncate to 20 entries
+            while state.history.len() > 20 {
+                state.history.pop_front();
+            }
+
+            // Add current line
+            state.history.push_back(line.to_string());
+        }
     }
     match cmd.to_lowercase().as_str() {
         "alias" => {
@@ -243,7 +150,7 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                 };
 
                 for line in string.lines() {
-                    run_line(state, line, level + 1);
+                    run(state, line, level + 1);
                 }
             }
         },
@@ -305,7 +212,7 @@ fn run<'i, I: Iterator<Item=&'i str>>(
             }
         },
         "clear" => {
-            state.borrow_mut().os.clear_text();
+            state.borrow_mut().os.text_clear();
         },
         "df" => {
             let state = state.borrow();
@@ -371,6 +278,11 @@ fn run<'i, I: Iterator<Item=&'i str>>(
             print!("Total: ");
             print_size(total);
             println!();
+        },
+        "history" => {
+            for line in state.borrow().history.iter() {
+                println!("{}", line);
+            }
         },
         "ls" => {
             let mut args: Vec<_> = args.collect();
@@ -575,7 +487,7 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                         line.push_str(arg);
                     }
                     //TODO: remove recursion!
-                    return run_line(state, &line, level + 1);
+                    return run(state, &line, level + 1);
                 }
             }
 
@@ -598,7 +510,7 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                         line.push(' ');
                         line.push_str(arg);
                     }
-                    return run_line(state, &line, level + 1);
+                    return run(state, &line, level + 1);
                 }
             }
 
@@ -619,23 +531,24 @@ pub(crate) fn main<
             fs,
             cwd: Vec::new(),
             aliases: BTreeMap::new(),
+            history: VecDeque::new(),
         }
     ));
 
-    run_line(&state, "call redos/autoexec", 0);
+    run(&state, "call redos/autoexec", 0);
 
     loop {
-        print!("/");
+        let mut prompt = "/".to_string();
         for (i, part) in state.borrow_mut().cwd.iter().enumerate() {
             if i > 0 {
-                print!("/");
+                prompt.push('/');
             }
-            print!("{}", part);
+            prompt.push_str(&part);
         }
-        print!("# ");
-        let line = state.borrow_mut().read_line();
+        prompt.push_str("# ");
+        let line = state.borrow_mut().read_line(&prompt);
         println!();
 
-        run_line(&state, &line, 0);
+        run(&state, &line, 0);
     }
 }

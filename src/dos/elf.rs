@@ -15,7 +15,7 @@ use redos_abi::{Abi, AbiData, AbiTime, error::Error};
 use crate::dos::{
     lookup_node,
     read_node,
-    State
+    state::State
 };
 
 unsafe fn abi_state(data: AbiData) -> &'static Rc<RefCell<State>> {
@@ -30,7 +30,7 @@ extern "C" fn abi_print(_data: AbiData, ptr: *const u8, len: usize) {
 
 extern "C" fn abi_text_clear(data: AbiData) {
     let state = unsafe { abi_state(data) };
-    state.borrow_mut().os.clear_text();
+    state.borrow_mut().os.text_clear();
 }
 
 extern "C" fn abi_text_color(data: AbiData, color: u8) {
@@ -38,9 +38,9 @@ extern "C" fn abi_text_color(data: AbiData, color: u8) {
     state.borrow_mut().os.set_text_color(color);
 }
 
-extern "C" fn abi_key(data: AbiData) -> char {
+extern "C" fn abi_key(data: AbiData) -> u32 {
     let state = unsafe { abi_state(data) };
-    state.borrow_mut().key()
+    state.borrow_mut().key() as u32
 }
 
 extern "C" fn abi_time(data: AbiData, time_ptr: *mut AbiTime) {
