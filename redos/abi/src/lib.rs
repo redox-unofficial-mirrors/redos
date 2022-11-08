@@ -36,6 +36,7 @@ pub struct AbiTime {
     pub nanosecond: u32,
 }
 
+//TODO: mark some of these functions unsafe?
 #[repr(C)]
 pub struct Abi {
     pub abi_data: AbiData,
@@ -43,8 +44,10 @@ pub struct Abi {
     pub abi_print: extern "C" fn(data: AbiData, ptr: *const u8, len: usize),
     pub abi_text_clear: extern "C" fn(data: AbiData),
     pub abi_text_color: extern "C" fn(data: AbiData, color: u8),
+    pub abi_get_text_position: extern "C" fn(data: AbiData, x: &mut usize, y: &mut usize),
+    pub abi_set_text_position: extern "C" fn(data: AbiData, x: usize, y: usize),
     pub abi_key: extern "C" fn(data: AbiData) -> u32,
-    pub abi_time: extern "C" fn(data: AbiData, time: *mut AbiTime),
+    pub abi_time: extern "C" fn(data: AbiData, time: &mut AbiTime),
     pub abi_alloc: extern "C" fn(data: AbiData, size: usize, align: usize) -> *mut u8,
     pub abi_dealloc: extern "C" fn(data: AbiData, ptr: *mut u8, size: usize, align: usize),
     pub abi_open: extern "C" fn(data: AbiData, ptr: *const u8, len: usize) -> usize,
@@ -85,6 +88,14 @@ impl Abi {
         (self.abi_text_color)(self.abi_data, color);
     }
 
+    pub fn get_text_position(&self, x: &mut usize, y: &mut usize) {
+        (self.abi_get_text_position)(self.abi_data, x, y)
+    }
+
+    pub fn set_text_position(&self, x: usize, y: usize) {
+        (self.abi_set_text_position)(self.abi_data, x, y);
+    }
+
     pub fn key(&self) -> char {
         char::from_u32((self.abi_key)(self.abi_data)).unwrap()
     }
@@ -121,7 +132,7 @@ impl Abi {
     }
 
     pub fn time(&self, time: &mut AbiTime) {
-        (self.abi_time)(self.abi_data, time as *mut AbiTime)
+        (self.abi_time)(self.abi_data, time)
     }
 
     pub fn open(&self, path: &str) -> Result<usize> {

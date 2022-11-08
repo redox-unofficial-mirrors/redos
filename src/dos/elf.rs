@@ -38,14 +38,25 @@ extern "C" fn abi_text_color(data: AbiData, color: u8) {
     state.borrow_mut().os.set_text_color(color);
 }
 
+extern "C" fn abi_get_text_position(data: AbiData, x: &mut usize, y: &mut usize) {
+    let state = unsafe { abi_state(data) };
+    let pos = state.borrow_mut().os.get_text_position();
+    *x = pos.0;
+    *y = pos.1;
+}
+
+extern "C" fn abi_set_text_position(data: AbiData, x: usize, y: usize) {
+    let state = unsafe { abi_state(data) };
+    state.borrow_mut().os.set_text_position(x, y);
+}
+
 extern "C" fn abi_key(data: AbiData) -> u32 {
     let state = unsafe { abi_state(data) };
     state.borrow_mut().key() as u32
 }
 
-extern "C" fn abi_time(data: AbiData, time_ptr: *mut AbiTime) {
+extern "C" fn abi_time(data: AbiData, time: &mut AbiTime) {
     let state = unsafe { abi_state(data) };
-    let time = unsafe { &mut *time_ptr };
     state.borrow_mut().os.time(time);
 }
 
@@ -154,6 +165,8 @@ pub(crate) fn elf<
         abi_print,
         abi_text_clear,
         abi_text_color,
+        abi_get_text_position,
+        abi_set_text_position,
         abi_key,
         abi_time,
         abi_alloc,
