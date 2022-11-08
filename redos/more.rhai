@@ -5,22 +5,22 @@ if args.len() == 0 {
 for arg in args {
     let data = read(open(arg));
 
+    let col = 0;
     let row = 0;
-    let line = "";
     for c in data.to_chars() {
-        if c == '\n' || line.len() >= 80 {
-            if row >= 25 {
+        putchar(c);
+        if c == '\n' {
+            col = 80;
+        } else {
+            col += 1;
+        }
+        if col >= 80 {
+            col = 0;
+            row += 1;
+            if row >= 24 {
                 prompt("Press enter for more... ");
                 row = 0;
             }
-            print(line);
-            row += 1;
-            line = "";
-        } else {
-            line += c;
         }
-    }
-    if line.len() > 0 {
-        print(line)
     }
 }

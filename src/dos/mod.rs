@@ -579,13 +579,30 @@ fn run<'i, I: Iterator<Item=&'i str>>(
                 }
             }
 
-            //TODO: only run if /redos/{}.elf or /redos/{}.rhai exists
+            // Look for executable
             {
                 let path = format!("/redos/{}.elf", cmd);
-                return elf::elf(state, &path, args);
+                let fd_opt = state.borrow_mut().open(&path);
+                if fd_opt.is_ok() {
+                    return elf::elf(state, &path, args);
+                }
             }
 
-            //println!("{}: command not found", cmd);
+            // Look for script
+            {
+                let path = format!("/redos/{}.rhai", cmd);
+                let fd_opt = state.borrow_mut().open(&path);
+                if fd_opt.is_ok() {
+                    let mut line = format!("rhai {}", path);
+                    for arg in args {
+                        line.push(' ');
+                        line.push_str(arg);
+                    }
+                    return run_line(state, &line, level + 1);
+                }
+            }
+
+            println!("{}: command not found", cmd);
         },
     }
 }
