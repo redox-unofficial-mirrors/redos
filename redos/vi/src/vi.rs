@@ -41,7 +41,8 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
         let mut command = false;
         let mut insert = false;
         let mut actions = Vec::new();
-        loop {
+        let mut running = true;
+        while running {
             abi.text_clear();
 
             // Ensure there is always a trailing newline
@@ -127,6 +128,18 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                     // Go to next column
                     col += 1;
                 }
+            }
+
+            // Fix cursor row if it went too far
+            if cursor_row + 1 > row {
+                if row > 0 {
+                    cursor_row = row - 1;
+                } else {
+                    cursor_row = 0;
+                    cursor_col = 0;
+                }
+                // Redraw
+                continue;
             }
 
             // Handle lack of trailing newline
@@ -242,12 +255,24 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                     },
                     // Left
                     'h' | '\u{2190}' => actions.push(Action::Left),
+                    // Top of screen
+                    'H' => {
+                        cursor_row = scroll;
+                    },
                     // Down
                     'j' | '\u{2193}' => actions.push(Action::Down),
                     // Up
                     'k' | '\u{2191}' => actions.push(Action::Up),
                     // Right
                     'l' | '\u{2192}' => actions.push(Action::Right),
+                    // Bottom of screen
+                    'L' => {
+                        cursor_row = scroll + height - 1;
+                    },
+                    // Middle of screen
+                    'M' => {
+                        cursor_row = scroll + height / 2;
+                    },
                     // Remove character at cursor
                     'x' => actions.push(Action::Delete),
                     // Remove character before cursor
@@ -327,8 +352,7 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                         abi.truncate(fd, data.len()).map_err(str_err)?;
                     },
                     Action::Exit => {
-                        //TODO: should we guarantee this is the last action?
-                        break;
+                        running = false;
                     }
                 }
             }
