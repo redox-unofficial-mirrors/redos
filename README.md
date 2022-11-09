@@ -32,6 +32,28 @@ an emulator with `make qemu`.
 
 Additionally, there is support for cycle-accurate emulation with
 [86Box](https://86box.net/).
-  - Download the latest 86Box AppImage and place it in the `86box` folder
-  - Download the latest 86Box roms zip file and extract it to the `86box` folder
-  - Run `86bos/run.sh i386` or `86box/run.sh i486` to emulate a system with that CPU
+- Download the latest 86Box AppImage and place it in the `86box` folder
+- Download the latest 86Box roms zip file and extract it to the `86box` folder
+- Run `86bos/run.sh i386` or `86box/run.sh i486` to emulate a system with that CPU
+
+## Commands
+
+ReDOS has a number of commands, both built-in and external:
+
+- `alias`: create and view aliases
+- `call`: execute a script
+- `cat`: print a file
+- `cd`: change directory
+- `clear`: clear screen
+- `date`: view system date
+- `df`: view available disk space
+- `echo`: print a string
+- `free`: view available memory
+- `history`: view command history
+- `ls`: list files in a directory
+- `mkdir`: create a directory
+- `rem`: leave a comment
+- `rm`: remove a file
+- `rmdir`: remove a directory
+- `touch`: create a file
+- `vi`: edit a file
