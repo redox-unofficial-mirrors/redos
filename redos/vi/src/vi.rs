@@ -1,8 +1,7 @@
 use alloc::{
     string::{String, ToString},
-    vec::Vec,
 };
-use redos_abi::{error::{self, Error}, rt::abi};
+use redos_abi::rt::abi;
 
 fn str_err<E: ToString>(err: E) -> String {
     err.to_string()
@@ -16,7 +15,7 @@ enum Mode {
     SearchBackwards,
 }
 
-enum Action {
+enum Event {
     Left,
     Right,
     Up,
@@ -24,10 +23,149 @@ enum Action {
     Home,
     HomeSkipSpace,
     End,
+    ScreenLow,
+    ScreenMiddle,
+    ScreenHigh,
+    Search(String),
+    SearchBackwards(String),
+    CreateLineAfter,
+    CreateLineBefore,
+    Insert(char),
     Backspace,
     Delete,
     Save,
     Exit,
+}
+
+fn with_events<E, F: FnMut(Event) -> Result<(), E>>(mode: Mode, mut callback: F) -> Result<Mode, E> {
+    let abi = abi();
+    match mode {
+        Mode::Normal => {
+            let c = abi.key();
+            match c {
+                // Unknown key
+                '\x00' => {},
+                // Enter insert mode after cursor
+                'a' => {
+                    callback(Event::Right)?;
+                    return Ok(Mode::Insert);
+                },
+                // Enter insert mode at end of line
+                'A' => {
+                    callback(Event::End)?;
+                    return Ok(Mode::Insert);
+                },
+                // Enter insert mode at cursor
+                'i' => {
+                    return Ok(Mode::Insert);
+                },
+                // Enter insert mode at start of line
+                'I' => {
+                    callback(Event::HomeSkipSpace)?;
+                    return Ok(Mode::Insert);
+                }
+                // Create line after and enter insert mode
+                'o' => {
+                    callback(Event::CreateLineAfter)?;
+                    return Ok(Mode::Insert);
+                },
+                // Create line before and enter insert mode
+                'O' => {
+                    callback(Event::CreateLineBefore)?;
+                    return Ok(Mode::Insert);
+                },
+                // Left
+                'h' | '\u{2190}' => callback(Event::Left)?,
+                // Top of screen
+                'H' => callback(Event::ScreenHigh)?,
+                // Down
+                'j' | '\u{2193}' => callback(Event::Down)?,
+                // Up
+                'k' | '\u{2191}' => callback(Event::Up)?,
+                // Right
+                'l' | '\u{2192}' => callback(Event::Right)?,
+                // Bottom of screen
+                'L' => callback(Event::ScreenLow)?,
+                // Middle of screen
+                'M' => callback(Event::ScreenMiddle)?,
+                // Remove character at cursor
+                'x' => callback(Event::Delete)?,
+                // Remove character before cursor
+                'X' => callback(Event::Backspace)?,
+                // Go to start of line
+                '0' => callback(Event::Home)?,
+                // Go to end of line
+                '$' => callback(Event::End)?,
+                // Go to start of line after whitespace
+                '^' => callback(Event::HomeSkipSpace)?,
+                // Enter command mode
+                ':' => {
+                    return Ok(Mode::Command);
+                },
+                // Enter search mode
+                '/' => {
+                    return Ok(Mode::Search);
+                },
+                // Enter search backwards mode
+                '?' => {
+                    return Ok(Mode::SearchBackwards);
+                },
+                _ => (),
+            }
+        },
+        Mode::Insert => {
+            let c = abi.key();
+            match c {
+                // Unknown key
+                '\x00' => {},
+                // Remove character before cursor
+                '\x08' => callback(Event::Backspace)?,
+                // Exit insert mode
+                '\x1B' => {
+                    callback(Event::Left)?;
+                    return Ok(Mode::Normal);
+                },
+                // Remove character at cursor
+                '\x7F' => callback(Event::Delete)?,
+                // Left
+                '\u{2190}' => callback(Event::Left)?,
+                // Down
+                '\u{2193}' => callback(Event::Down)?,
+                // Up
+                '\u{2191}' => callback(Event::Up)?,
+                // Right
+                '\u{2192}' => callback(Event::Right)?,
+                // Insert character
+                _  => callback(Event::Insert(c))?,
+            }
+        },
+        Mode::Command => {
+            let line = abi.read_line();
+            match line.as_str() {
+                "q" => callback(Event::Exit)?,
+                "w" =>  callback(Event::Save)?,
+                "x" =>  {
+                    callback(Event::Save)?;
+                    callback(Event::Exit)?;
+                },
+                _ => (),
+            }
+
+            return Ok(Mode::Normal);
+        },
+        Mode::Search => {
+            let line = abi.read_line();
+            callback(Event::Search(line))?;
+            return Ok(Mode::Normal);
+        },
+        Mode::SearchBackwards => {
+            let line = abi.read_line();
+            callback(Event::SearchBackwards(line))?;
+            return Ok(Mode::Normal);
+        },
+    }
+
+    Ok(mode)
 }
 
 pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
@@ -48,7 +186,6 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
         let mut cursor_col = 0;
         let mut mode = Mode::Normal;
         let mut search_index_opt = None;
-        let mut actions = Vec::new();
         let mut running = true;
         while running {
             abi.text_clear();
@@ -178,201 +315,45 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
             match mode {
                 Mode::Normal => {
                     print!("-- NORMAL -- {}, {} in {}, {}", cursor_row, cursor_index_col, row, cursor_row_col);
-
-                    let c = abi.key();
-                    match c {
-                        // Unknown key
-                        '\x00' => {},
-                        // Enter insert mode after cursor
-                        'a' => {
-                            actions.push(Action::Right);
-                            mode = Mode::Insert;
-                        },
-                        // Enter insert mode at end of line
-                        'A' => {
-                            actions.push(Action::End);
-                            mode = Mode::Insert;
-                        },
-                        // Enter insert mode at cursor
-                        'i' => {
-                            mode = Mode::Insert
-                        },
-                        // Enter insert mode at start of line
-                        'I' => {
-                            actions.push(Action::HomeSkipSpace);
-                            mode = Mode::Insert;
-                        }
-                        // Create line after and enter insert mode
-                        'o' => {
-                            data.insert(cursor_row_end, '\n');
-                            cursor_col = 0;
-                            cursor_row += 1;
-                            mode = Mode::Insert;
-                        },
-                        // Create line before and enter insert mode
-                        'O' => {
-                            data.insert(cursor_row_start, '\n');
-                            cursor_col = 0;
-                            mode = Mode::Insert;
-                        },
-                        // Left
-                        'h' | '\u{2190}' => actions.push(Action::Left),
-                        // Top of screen
-                        'H' => {
-                            cursor_row = scroll;
-                        },
-                        // Down
-                        'j' | '\u{2193}' => actions.push(Action::Down),
-                        // Up
-                        'k' | '\u{2191}' => actions.push(Action::Up),
-                        // Right
-                        'l' | '\u{2192}' => actions.push(Action::Right),
-                        // Bottom of screen
-                        'L' => {
-                            cursor_row = scroll + height - 1;
-                        },
-                        // Middle of screen
-                        'M' => {
-                            cursor_row = scroll + height / 2;
-                        },
-                        // Remove character at cursor
-                        'x' => actions.push(Action::Delete),
-                        // Remove character before cursor
-                        'X' => actions.push(Action::Backspace),
-                        // Go to start of line
-                        '0' => actions.push(Action::Home),
-                        // Go to end of line
-                        '$' => actions.push(Action::End),
-                        // Go to start of line after whitespace
-                        '^' => actions.push(Action::HomeSkipSpace),
-                        // Enter command mode
-                        ':' => mode = Mode::Command,
-                        // Enter search mode
-                        '/' => mode = Mode::Search,
-                        // Enter search backwards mode
-                        '?' => mode = Mode::SearchBackwards,
-                        _ => (),
-                    }
                 },
                 Mode::Insert => {
-                    print!("-- INSERT -- {}, {} ({}) in {}, {}", cursor_row, cursor_index_col, cursor_col, row, cursor_row_col);
-
-                    let c = abi.key();
-                    match c {
-                        // Unknown key
-                        '\x00' => {},
-                        // Remove character before cursor
-                        '\x08' => actions.push(Action::Backspace),
-                        // Exit insert mode
-                        '\x1B' => {
-                            actions.push(Action::Left);
-                            mode = Mode::Normal;
-                        },
-                        // Remove character at cursor
-                        '\x7F' => actions.push(Action::Delete),
-                        // Left
-                        '\u{2190}' => actions.push(Action::Left),
-                        // Down
-                        '\u{2193}' => actions.push(Action::Down),
-                        // Up
-                        '\u{2191}' => actions.push(Action::Up),
-                        // Right
-                        '\u{2192}' => actions.push(Action::Right),
-                        // New line
-                        '\n' | '\r' => {
-                            data.insert(cursor_index, '\n');
-                            cursor_row += 1;
-                            cursor_col = 0;
-                        },
-                        // Insert character
-                        _  => {
-                            if ! c.is_control() {
-                                data.insert(cursor_index, c);
-                                cursor_col = cursor_index_col + 1;
-                                if cursor_col >= width {
-                                    cursor_row += 1;
-                                    cursor_col = 0;
-                                }
-                            }
-                        },
-                    }
+                    print!("-- INSERT -- {}, {} in {}, {}", cursor_row, cursor_index_col, row, cursor_row_col);
                 },
                 Mode::Command => {
-                    let prompt = ":";
-                    print!("{}", prompt);
-                    let line = abi.read_line();
-                    for c in prompt.chars().chain(line.chars()) {
-                        print!("\x08 \x08");
-                    }
-
-                    match line.as_str() {
-                        "q" => actions.push(Action::Exit),
-                        "w" =>  actions.push(Action::Save),
-                        "x" =>  {
-                            actions.push(Action::Save);
-                            actions.push(Action::Exit);
-                        },
-                        _ => (),
-                    }
-
-                    mode = Mode::Normal;
+                    print!(":");
                 },
                 Mode::Search => {
-                    let prompt = "/";
-                    print!("{}", prompt);
-                    let line = abi.read_line();
-                    for c in prompt.chars().chain(line.chars()) {
-                        print!("\x08 \x08");
-                    }
-
-                    search_index_opt = match data[cursor_index..].find(&line) {
-                        Some(some) => Some(cursor_index + some),
-                        None => None,
-                    };
-
-                    mode = Mode::Normal;
+                    print!("/");
                 },
                 Mode::SearchBackwards => {
-                    let prompt = "?";
-                    print!("{}", prompt);
-                    let line = abi.read_line();
-                    for c in prompt.chars().chain(line.chars()) {
-                        print!("\x08 \x08");
-                    }
-
-                    search_index_opt = match data[..cursor_index].rfind(&line) {
-                        Some(some) => Some(some),
-                        None => None,
-                    };
-
-                    mode = Mode::Normal;
-                },
+                    print!("?");
+                }
             }
 
-            for action in actions.drain(..) {
-                match action {
-                    Action::Left => if cursor_index_col > 0 {
+            mode = with_events(mode, |event| -> Result<(), String> {
+                match event {
+                    Event::Left => if cursor_index_col > 0 {
                         cursor_col = cursor_index_col - 1;
                     },
-                    Action::Right => if cursor_index_col < cursor_row_col {
+                    Event::Right => if cursor_index_col < cursor_row_col {
                         cursor_col = cursor_index_col + 1;
                     },
-                    Action::Up => if cursor_row > 0 {
+                    Event::Up => if cursor_row > 0 {
                         cursor_row -= 1;
                         if cursor_row < scroll {
                             scroll = cursor_row;
                         }
                     },
-                    Action::Down => if cursor_row + 1 < row {
+                    Event::Down => if cursor_row + 1 < row {
                         cursor_row += 1;
                         if cursor_row >= scroll + height {
                             scroll = cursor_row - (height - 1);
                         }
                     },
-                    Action::Home => {
+                    Event::Home => {
                         cursor_col = 0;
                     },
-                    Action::HomeSkipSpace => {
+                    Event::HomeSkipSpace => {
                         cursor_col = 0;
                         for c in data[cursor_row_start..cursor_row_end].chars() {
                             if c.is_whitespace() {
@@ -382,10 +363,63 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                             }
                         }
                     },
-                    Action::End => {
+                    Event::End => {
                         cursor_col = cursor_row_col;
                     },
-                    Action::Backspace => if cursor_index < data.len() {
+                    Event::ScreenLow => {
+                        cursor_row = scroll + height - 1;
+                    },
+                    Event::ScreenMiddle => {
+                        cursor_row = scroll + height / 2;
+                    },
+                    Event::ScreenHigh => {
+                        cursor_row = scroll;
+                    },
+                    Event::Search(line) => {
+                        search_index_opt = match data[cursor_index..].find(&line) {
+                            Some(some) => Some(cursor_index + some),
+                            None => None,
+                        };
+                    },
+                    Event::SearchBackwards(line) => {
+                        search_index_opt = match data[..cursor_index].rfind(&line) {
+                            Some(some) => Some(some),
+                            None => None,
+                        };
+                    },
+                    Event::CreateLineAfter => {
+                        data.insert(cursor_row_end, '\n');
+                        cursor_col = 0;
+                        cursor_row += 1;
+                    },
+                    Event::CreateLineBefore => {
+                        data.insert(cursor_row_start, '\n');
+                        cursor_col = 0;
+                    },
+                    Event::Insert(c) => {
+                        if c.is_control() {
+                            match c {
+                                '\n' => {
+                                    data.insert(cursor_index, '\n');
+                                    cursor_row += 1;
+                                    cursor_col = 0;
+                                },
+                                '\r' => {
+                                    cursor_col = 0;
+                                },
+                                _ => (),
+                            }
+                            //TODO: handle other control characters?
+                        } else {
+                            data.insert(cursor_index, c);
+                            cursor_col = cursor_index_col + 1;
+                            if cursor_col >= width {
+                                cursor_row += 1;
+                                cursor_col = 0;
+                            }
+                        }
+                    },
+                    Event::Backspace => if cursor_index < data.len() {
                         let mut before_opt = None;
                         for (i, _) in data.char_indices() {
                             if i < cursor_index {
@@ -404,18 +438,20 @@ pub(crate) fn vi(args: &[&str]) -> Result<(), String> {
                             }
                         }
                     },
-                    Action::Delete => if cursor_index < data.len() {
+                    Event::Delete => if cursor_index < data.len() {
                         data.remove(cursor_index);
                     },
-                    Action::Save => {
+                    Event::Save => {
                         abi.pwrite(fd, data.as_bytes(), 0).map_err(str_err)?;
                         abi.truncate(fd, data.len()).map_err(str_err)?;
                     },
-                    Action::Exit => {
+                    Event::Exit => {
                         running = false;
                     }
                 }
-            }
+
+                Ok(())
+            })?;
         }
     }
 
