@@ -18,11 +18,12 @@ clean:
 
 $(BUILD)/filesystem: redos/autoexec redos/*.rhai redos/*.txt $(REDOS_BINS)
 	mkdir -p $(BUILD)
-	rm -rf $@.partial
+	rm -rf $@.partial $@
 	mkdir $@.partial
 	mkdir $@.partial/redos
 	for file in $^; do cp $$file $@.partial/redos; done
 	mv $@.partial $@
+	touch $@
 
 $(BUILD)/filesystem.bin: $(BUILD)/filesystem
 	mkdir -p $(BUILD)
