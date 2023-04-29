@@ -60,6 +60,11 @@ extern "C" fn abi_time(data: AbiData, time: &mut AbiTime) {
     state.borrow_mut().os.time(time);
 }
 
+extern "C" fn abi_delay_us(data: AbiData, microseconds: u32) {
+    let state = unsafe { abi_state(data) };
+    state.borrow_mut().os.delay_us(microseconds);
+}
+
 extern "C" fn abi_alloc(_data: AbiData, size: usize, align: usize) -> *mut u8 {
     use alloc::alloc::{alloc_zeroed, Layout};
     let layout = Layout::from_size_align(size, align).unwrap();
@@ -169,6 +174,7 @@ pub(crate) fn elf<
         abi_set_text_position,
         abi_key,
         abi_time,
+        abi_delay_us,
         abi_alloc,
         abi_dealloc,
         abi_open,

@@ -86,4 +86,5 @@ pub trait Os<
     }
 
     fn time(&self, time: &mut AbiTime);
+    fn delay_us(&self, microseconds: u32);
 }

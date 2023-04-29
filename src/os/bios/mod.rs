@@ -203,6 +203,14 @@ impl Os<
     fn time(&self, time: &mut AbiTime) {
         time::Time { thunk1a: self.thunk1a }.read(time)
     }
+
+    fn delay_us(&self, microseconds: u32) {
+        let mut data = ThunkData::new();
+        data.eax = 0x8600;
+        data.ecx = (microseconds >> 16) & 0xFFFF;
+        data.edx = microseconds & 0xFFFF;
+        unsafe { data.with(self.thunk15); }
+    }
 }
 
 #[no_mangle]

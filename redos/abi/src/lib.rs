@@ -48,6 +48,7 @@ pub struct Abi {
     pub abi_set_text_position: extern "C" fn(data: AbiData, x: usize, y: usize),
     pub abi_key: extern "C" fn(data: AbiData) -> u32,
     pub abi_time: extern "C" fn(data: AbiData, time: &mut AbiTime),
+    pub abi_delay_us: extern "C" fn (data: AbiData, microseconds: u32),
     pub abi_alloc: extern "C" fn(data: AbiData, size: usize, align: usize) -> *mut u8,
     pub abi_dealloc: extern "C" fn(data: AbiData, ptr: *mut u8, size: usize, align: usize),
     pub abi_open: extern "C" fn(data: AbiData, ptr: *const u8, len: usize) -> usize,
@@ -132,7 +133,11 @@ impl Abi {
     }
 
     pub fn time(&self, time: &mut AbiTime) {
-        (self.abi_time)(self.abi_data, time)
+        (self.abi_time)(self.abi_data, time);
+    }
+
+    pub fn delay_us(&self, microseconds: u32) {
+        (self.abi_delay_us)(self.abi_data, microseconds);
     }
 
     pub fn open(&self, path: &str) -> Result<usize> {
