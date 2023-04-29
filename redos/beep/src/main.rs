@@ -43,6 +43,8 @@ fn time_to_nanos(time: &AbiTime) -> u128 {
 }
 
 fn delay(millis: u32) {
+    abi().delay_us(millis * 1000);
+    /*TODO: WHY THIS BROKE?
     let mut time = AbiTime::default();
     abi().time(&mut time);
     let start = time_to_nanos(&time);
@@ -52,6 +54,7 @@ fn delay(millis: u32) {
             break;
         }
     }
+    */
 }
 
 fn print_time(time: &AbiTime) {
@@ -114,10 +117,11 @@ pub extern "C" fn main() {
     abi().time(&mut time);
     print_time(&time);
 
-    const SIXTEENTH: u32 = EIGHTH / 2;
-    const EIGHTH: u32 = QUARTER / 2;
-    const QUARTER: u32 = 60000 / 30;
+    const BPM: u32 = 200;
+    const QUARTER: u32 = 60000 / BPM;
     const HALF: u32 = QUARTER * 2;
+    const EIGHTH: u32 = QUARTER / 2;
+    const SIXTEENTH: u32 = EIGHTH / 2;
 
     note(E2, EIGHTH);
     note(E2, EIGHTH);
