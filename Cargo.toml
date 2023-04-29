@@ -27,6 +27,9 @@ features = ["const_mut_refs"]
 path = "redos/abi"
 default-features = false
 
+[dependencies.redos_hw]
+path = "redos/hw"
+
 [dependencies.redoxfs]
 version = "0.5.3"
 default-features = false

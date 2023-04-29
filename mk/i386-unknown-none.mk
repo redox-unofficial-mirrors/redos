@@ -4,9 +4,11 @@ export PARTED?=parted
 export QEMU?=qemu-system-i386
 export REDOS_TARGET=i386-unknown-redos
 
-all: $(BUILD)/bootloader.bin
+all: $(BUILD)/harddrive.bin
 
-$(BUILD)/lib%.a: redos/%/src/main.rs Cargo.lock $(shell find redos/* -type f)
+.SECONDEXPANSION:
+
+$(BUILD)/lib%.a: $$(shell find redos/$$* redos/abi redos/hw Cargo.lock -type f)
 	env | sort
 	mkdir -p $(BUILD)
 	env RUSTFLAGS="-C lto=fat -C soft-float" \
@@ -93,11 +95,11 @@ qemu: $(BUILD)/harddrive.bin
 		-d cpu_reset,guest_errors,int \
 		-no-reboot \
 		-smp 1 -m 8 \
+		-audiodev sdl,id=audio0 \
 		-chardev stdio,id=debug,signal=off,mux=on \
 		-serial chardev:debug \
 		-mon chardev=debug \
-		-machine pc \
+		-machine pc,pcspk-audiodev=audio0 \
 		-net none \
-		-enable-kvm \
 		-cpu 486 \
 		-drive file=$<,format=raw

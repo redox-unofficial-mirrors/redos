@@ -3,6 +3,8 @@ BUILD=build/$(TARGET)
 export RUST_TARGET_PATH=$(CURDIR)/targets
 
 REDOS_BINS=\
+	$(BUILD)/beep.elf \
+	$(BUILD)/blaster.elf \
 	$(BUILD)/date.elf \
 	$(BUILD)/help.elf \
 	$(BUILD)/vi.elf

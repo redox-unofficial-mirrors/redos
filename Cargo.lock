@@ -325,6 +325,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "redos_beep"
+version = "0.1.0"
+dependencies = [
+ "redos_abi",
+ "redos_hw",
+ "redox_hwio",
+]
+
+[[package]]
+name = "redos_blaster"
+version = "0.1.0"
+dependencies = [
+ "redos_abi",
+ "redos_hw",
+ "redox_hwio",
+]
+
+[[package]]
 name = "redos_date"
 version = "0.1.0"
 dependencies = [
@@ -336,6 +354,13 @@ name = "redos_help"
 version = "0.1.0"
 dependencies = [
  "redos_abi",
+]
+
+[[package]]
+name = "redos_hw"
+version = "0.1.0"
+dependencies = [
+ "redox_hwio",
 ]
 
 [[package]]
@@ -360,12 +385,19 @@ dependencies = [
  "bitflags",
  "linked_list_allocator",
  "redos_abi",
+ "redos_hw",
  "redox_syscall",
  "redox_uefi",
  "redox_uefi_std",
  "redoxfs",
  "x86",
 ]
+
+[[package]]
+name = "redox_hwio"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eb516ad341a84372b5b15a5a35cf136ba901a639c8536f521b108253d7fce74"
 
 [[package]]
 name = "redox_simple_endian"
