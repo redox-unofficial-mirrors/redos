@@ -1,13 +1,14 @@
 use alloc::{string::String, vec::Vec};
 use hwio::{Io, Pio, ReadOnly, WriteOnly};
 
-use super::isadma::IsaDmaChannel;
+use super::isadma::{IsaDma, IsaDmaBuffer, IsaDmaChannel};
 
 #[allow(dead_code)]
 pub struct Sb16 {
     pub version: (u8, u8),
     pub irqs: Vec<u8>,
     pub dmas: Vec<IsaDmaChannel>,
+    pub buffer: IsaDmaBuffer,
     // Regs
     /* 0x04 */ mixer_addr: WriteOnly<Pio<u8>>,
     /* 0x05 */ mixer_data: Pio<u8>,
@@ -24,6 +25,8 @@ impl Sb16 {
             version: (0, 0),
             irqs: Vec::new(),
             dmas: Vec::new(),
+            buffer: IsaDmaBuffer::new()
+                .ok_or_else(|| format!("failed to allocate ISA DMA buffer"))?,
             // Regs
             mixer_addr: WriteOnly::new(Pio::new(addr + 0x04)),
             mixer_data: Pio::new(addr + 0x05),
@@ -85,7 +88,7 @@ impl Sb16 {
 
             let ready = self.dsp_read()?;
             if ready != 0xAA {
-                return Err(format!("ready byte was 0x{:02X} instead of 0xAA", ready));
+                return Err(format!("Ready byte was 0x{:02X} instead of 0xAA", ready));
             }
         }
 
@@ -141,6 +144,42 @@ impl Sb16 {
             }
         }
 
+        // Start DMA transfers
+        {
+            let mut dma_opt = None;
+            for &dma_channel in &self.dmas {
+                match dma_channel {
+                    IsaDmaChannel::Five | IsaDmaChannel::Six | IsaDmaChannel::Seven => {
+                        dma_opt = Some(IsaDma::new(dma_channel));
+                        break;
+                    }
+                    _ => (),
+                }
+            }
+
+            let mut dma = match dma_opt {
+                Some(some) => some,
+                None => return Err(format!("No compatible DMA channel found")),
+            };
+
+            // Disable channel
+            dma.mask.write(0x04 | dma.index);
+            // Flip flop reset (any value)
+            dma.flip_flop.write(0xFF);
+            // Set transfer mode to automatic
+            dma.mode.write(0x58 | dma.index);
+            // Write page
+            dma.page.write((self.buffer.address() >> 16) as u8);
+            // Write address, low then high byte
+            dma.address.write(self.buffer.address() as u8);
+            dma.address.write((self.buffer.address() >> 8) as u8);
+            // Write length (0x1_0000 - 1), low then high byte
+            dma.count.write(0xFF);
+            dma.count.write(0xFF);
+            // Enable channel
+            dma.mask.write(dma.index);
+        }
+
         // Set output sample rate to 44100 Hz (Redox OS standard)
         {
             let rate = 44100u16;
@@ -148,6 +187,21 @@ impl Sb16 {
             self.dsp_write((rate >> 8) as u8)?;
             self.dsp_write(rate as u8)?;
         }
+
+        // Set sound format to 16-bit stereo signed
+        {
+            // 16-bit DMA with auto-init
+            self.dsp_write(0xB4)?;
+            // Stereo, signed samples
+            self.dsp_write(0x30)?;
+            // Number of samples minus one, low
+            self.dsp_write(0xFF)?;
+            // Number of samples minus one, high
+            self.dsp_write(0x3F)?;
+        }
+
+        // Turn speaker on
+        self.dsp_write(0xD1)?;
 
         Ok(())
     }
