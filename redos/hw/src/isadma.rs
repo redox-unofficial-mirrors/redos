@@ -12,17 +12,17 @@ pub enum IsaDmaChannel {
 }
 
 pub struct IsaDma {
-    channel: IsaDmaChannel,
-    primary: bool,
-    index: u8,
-    addr: WriteOnly<Pio<u16>>,
-    count: WriteOnly<Pio<u16>>,
-    status: ReadOnly<Pio<u8>>,
-    command: WriteOnly<Pio<u8>>,
-    request: WriteOnly<Pio<u8>>,
-    mask: WriteOnly<Pio<u8>>,
-    mode: WriteOnly<Pio<u8>>,
-    flip_flop: WriteOnly<Pio<u8>>,
+    pub channel: IsaDmaChannel,
+    pub primary: bool,
+    pub index: u8,
+    pub addr: WriteOnly<Pio<u16>>,
+    pub count: WriteOnly<Pio<u16>>,
+    pub status: ReadOnly<Pio<u8>>,
+    pub command: WriteOnly<Pio<u8>>,
+    pub request: WriteOnly<Pio<u8>>,
+    pub mask: WriteOnly<Pio<u8>>,
+    pub mode: WriteOnly<Pio<u8>>,
+    pub flip_flop: WriteOnly<Pio<u8>>,
 }
 
 impl IsaDma {
