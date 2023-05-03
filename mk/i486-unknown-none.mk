@@ -97,6 +97,7 @@ qemu: $(BUILD)/harddrive.bin
 		-smp 1 -m 8 \
 		-audiodev sdl,id=audio0 \
 		-device sb16,audiodev=audio0 \
+		-display sdl \
 		-chardev stdio,id=debug,signal=off,mux=on \
 		-serial chardev:debug \
 		-mon chardev=debug \

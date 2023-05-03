@@ -17,6 +17,7 @@ pub struct Sb16 {
     /* 0x0C */ dsp_write_data: WriteOnly<Pio<u8>>,
     /* 0x0C */ dsp_write_status: ReadOnly<Pio<u8>>,
     /* 0x0E */ dsp_read_status: ReadOnly<Pio<u8>>,
+    /* 0x0F */ irq_acknowledge: ReadOnly<Pio<u8>>,
 }
 
 impl Sb16 {
@@ -35,6 +36,7 @@ impl Sb16 {
             dsp_write_data: WriteOnly::new(Pio::new(addr + 0x0C)),
             dsp_write_status: ReadOnly::new(Pio::new(addr + 0x0C)),
             dsp_read_status: ReadOnly::new(Pio::new(addr + 0x0E)),
+            irq_acknowledge: ReadOnly::new(Pio::new(addr + 0x0F)),
         };
 
         module.init(delay_us)?;
@@ -53,21 +55,28 @@ impl Sb16 {
     }
 
     fn dsp_read(&mut self) -> Result<u8, String> {
+        log::info!("DSP read");
+
         // Bit 7 must be 1 before data can be sent
         while !self.dsp_read_status.readf(1 << 7) {
             //TODO: timeout!
         }
 
-        Ok(self.dsp_read_data.read())
+        let value = self.dsp_read_data.read();
+        log::info!("DSP read = Ok(0x{:02X})", value);
+        Ok(value)
     }
 
     fn dsp_write(&mut self, value: u8) -> Result<(), String> {
+        log::info!("DSP write 0x{:02X}", value);
+
         // Bit 7 must be 0 before data can be sent
         while self.dsp_write_status.readf(1 << 7) {
             //TODO: timeout!
         }
 
         self.dsp_write_data.write(value);
+        log::info!("DSP write = Ok(())");
         Ok(())
     }
 
@@ -144,6 +153,16 @@ impl Sb16 {
             }
         }
 
+        // Set master volume
+        self.mixer_write(0x22, 0xFF);
+
+        // Turn speaker on
+        self.dsp_write(0xD1)?;
+
+        Ok(())
+    }
+
+    pub fn start(&mut self) -> Result<(), String> {
         // Start DMA transfers
         {
             let mut dma_opt = None;
@@ -162,6 +181,8 @@ impl Sb16 {
                 None => return Err(format!("No compatible DMA channel found")),
             };
 
+            log::info!("DMA {}, {}", dma.primary, dma.index);
+
             // Disable channel
             dma.mask.write(0x04 | dma.index);
             // Flip flop reset (any value)
@@ -170,12 +191,14 @@ impl Sb16 {
             dma.mode.write(0x58 | dma.index);
             // Write page
             dma.page.write((self.buffer.address() >> 16) as u8);
-            // Write address, low then high byte
-            dma.address.write(self.buffer.address() as u8);
-            dma.address.write((self.buffer.address() >> 8) as u8);
-            // Write length (0x1_0000 - 1), low then high byte
+            // Write address >> 1, low byte
+            dma.address.write((self.buffer.address() >> 1) as u8);
+            // Write address >> 1, high byte
+            dma.address.write((self.buffer.address() >> 9) as u8);
+            // Write length (0x1_0000 - 1) >> 1, low byte
             dma.count.write(0xFF);
-            dma.count.write(0xFF);
+            // Write length (0x1_0000 - 1) >> 1, high byte
+            dma.count.write(0x7F);
             // Enable channel
             dma.mask.write(dma.index);
         }
@@ -190,8 +213,8 @@ impl Sb16 {
 
         // Set sound format to 16-bit stereo signed
         {
-            // 16-bit DMA with auto-init
-            self.dsp_write(0xB4)?;
+            // 16-bit DMA with auto-init and FIFO
+            self.dsp_write(0xB6)?;
             // Stereo, signed samples
             self.dsp_write(0x30)?;
             // Number of samples minus one, low
@@ -200,9 +223,18 @@ impl Sb16 {
             self.dsp_write(0x3F)?;
         }
 
-        // Turn speaker on
-        self.dsp_write(0xD1)?;
+        Ok(())
+    }
 
+    pub fn wait(&mut self) -> Result<(), String> {
+        //TODO: timeout
+        while self.mixer_read(0x82) == 0 {}
+        self.irq_acknowledge.read();
+        Ok(())
+    }
+
+    pub fn stop(&mut self) -> Result<(), String> {
+        self.dsp_write(0xD9)?;
         Ok(())
     }
 }

@@ -321,6 +321,7 @@ dependencies = [
 name = "redos_abi"
 version = "0.1.0"
 dependencies = [
+ "log",
  "redox_syscall",
 ]
 
@@ -360,6 +361,7 @@ dependencies = [
 name = "redos_hw"
 version = "0.1.0"
 dependencies = [
+ "log",
  "redox_hwio",
 ]
 

@@ -34,32 +34,24 @@ pub struct IsaDma {
 
 impl IsaDma {
     pub fn new(channel: IsaDmaChannel) -> Self {
-        let (primary, index, page_register) = match channel {
-            IsaDmaChannel::Zero => (true, 0, 0x87),
-            IsaDmaChannel::One => (true, 1, 0x83),
-            IsaDmaChannel::Two => (true, 2, 0x81),
-            IsaDmaChannel::Three => (true, 3, 0x82),
-            IsaDmaChannel::Four => (false, 0, 0x8F),
-            IsaDmaChannel::Five => (false, 1, 0x8B),
-            IsaDmaChannel::Six => (false, 2, 0x89),
-            IsaDmaChannel::Seven => (false, 3, 0x8A),
+        let (primary, index, page_port, address_port, count_port) = match channel {
+            IsaDmaChannel::Zero => (true, 0, 0x87, 0x00, 0x01),
+            IsaDmaChannel::One => (true, 1, 0x83, 0x02, 0x03),
+            IsaDmaChannel::Two => (true, 2, 0x81, 0x04, 0x05),
+            IsaDmaChannel::Three => (true, 3, 0x82, 0x06, 0x07),
+            IsaDmaChannel::Four => (false, 0, 0x8F, 0xC0, 0xC2),
+            IsaDmaChannel::Five => (false, 1, 0x8B, 0xC4, 0xC6),
+            IsaDmaChannel::Six => (false, 2, 0x89, 0xC8, 0xCA),
+            IsaDmaChannel::Seven => (false, 3, 0x8A, 0xCC, 0xCE),
         };
 
         Self {
             channel,
             primary,
             index,
-            page: Pio::new(page_register),
-            address: WriteOnly::new(Pio::new(if primary {
-                (0x00 + index).into()
-            } else {
-                (0xC0 + index * 2).into()
-            })),
-            count: WriteOnly::new(Pio::new(if primary {
-                (0x01 + index).into()
-            } else {
-                (0xC2 + index * 2).into()
-            })),
+            page: Pio::new(page_port),
+            address: WriteOnly::new(Pio::new(address_port)),
+            count: WriteOnly::new(Pio::new(count_port)),
             status: ReadOnly::new(Pio::new(if primary { 0x08 } else { 0xD0 })),
             command: WriteOnly::new(Pio::new(if primary { 0x08 } else { 0xD0 })),
             request: WriteOnly::new(Pio::new(if primary { 0x09 } else { 0xD2 })),

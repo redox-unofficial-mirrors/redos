@@ -1,6 +1,5 @@
-//TODO: move to redos_abi?
-
 use core::{fmt, ptr};
+use log::{LevelFilter, Log, Metadata, Record};
 
 use crate::Abi;
 
@@ -36,12 +35,38 @@ macro_rules! println {
     ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
 }
 
+static LOGGER: Logger = Logger;
+
+struct Logger;
+
+impl Logger {
+    fn init(&'static self) {
+        log::set_logger(self).unwrap();
+        log::set_max_level(LevelFilter::Debug);
+    }
+}
+
+impl Log for Logger {
+    fn enabled(&self, _metadata: &Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            println!("{} - {}", record.level(), record.args());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn start(abi: *const Abi) {
     extern "C" {
         fn main();
     }
     ABI = abi;
+    LOGGER.init();
     main();
 }
 
