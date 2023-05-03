@@ -5,15 +5,13 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use core::{
-    cell::RefCell,
-};
+use core::cell::RefCell;
 use redoxfs::{Disk, FileSystem, Node, Transaction, TreeData, TreePtr};
 use syscall::Error;
 
-use crate::{Os, OsMemoryKind};
-use crate::os::{OsDisk, VideoModeIter};
 use self::state::State;
+use crate::os::{OsDisk, VideoModeIter};
+use crate::{Os, OsMemoryKind};
 
 mod elf;
 mod state;
@@ -54,8 +52,11 @@ fn read_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Result<
     Err(Error::new(syscall::EFBIG))
 }
 
-fn readdir_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Result<Vec<redoxfs::DirEntry>, Error> {
-    if ! node.data().is_dir() {
+fn readdir_node<D: Disk>(
+    tx: &mut Transaction<D>,
+    node: &TreeData<Node>,
+) -> Result<Vec<redoxfs::DirEntry>, Error> {
+    if !node.data().is_dir() {
         return Err(Error::new(syscall::ENOTDIR));
     }
 
@@ -65,11 +66,17 @@ fn readdir_node<D: Disk>(tx: &mut Transaction<D>, node: &TreeData<Node>) -> Resu
 }
 
 fn print_size(size: u64) {
-    if size >= 1 << 31 /* 2 GiB */ {
+    if size >= 1 << 31
+    /* 2 GiB */
+    {
         print!("{} GiB", size >> 30 /* 1 GiB */);
-    } else if size >= 1 << 21 /* 2 MiB */ {
+    } else if size >= 1 << 21
+    /* 2 MiB */
+    {
         print!("{} MiB", size >> 20 /* 1 MiB */);
-    } else if size >= 1 << 11 /* 2 KiB */ {
+    } else if size >= 1 << 11
+    /* 2 KiB */
+    {
         print!("{} KiB", size >> 10 /* 1 KiB */);
     } else {
         print!("{} B", size);
@@ -77,9 +84,7 @@ fn print_size(size: u64) {
 }
 
 fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
-    let mut args = line
-        .split(' ')
-        .filter(|x| !x.is_empty());
+    let mut args = line.split(' ').filter(|x| !x.is_empty());
     let cmd = match args.next() {
         Some(some) => some,
         None => return,
@@ -95,7 +100,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
         } else {
             false
         };
-        if ! found {
+        if !found {
             // Truncate to 20 entries
             while state.history.len() > 20 {
                 state.history.pop_front();
@@ -119,7 +124,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                     println!();
                 }
             }
-        },
+        }
         "call" => {
             for arg in args {
                 let string = {
@@ -140,8 +145,8 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                             Err(err) => {
                                 println!("{}: {}: {:?}", cmd, arg, err);
                                 return;
-                            },
-                        }
+                            }
+                        },
                         Err(err) => {
                             println!("{}: {}: {:?}", cmd, arg, err);
                             return;
@@ -153,7 +158,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                     run(state, line, level + 1);
                 }
             }
-        },
+        }
         "cat" => {
             let mut state = state.borrow_mut();
             for arg in args {
@@ -172,8 +177,8 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                         Err(err) => {
                             println!("{}: {}: {:?}", cmd, arg, err);
                             return;
-                        },
-                    }
+                        }
+                    },
                     Err(err) => {
                         println!("{}: {}: {:?}", cmd, arg, err);
                         return;
@@ -181,11 +186,11 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                 };
                 println!("{}", string);
             }
-        },
+        }
         "cd" => {
             let arg = match args.next() {
                 Some(some) => some,
-                None => "/"
+                None => "/",
             };
             if args.next().is_some() {
                 println!("{}: too many arguments", cmd);
@@ -198,22 +203,22 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
 
             match state.fs.tx(|mut tx| {
                 let node = lookup_node(&mut tx, &path)?;
-                if ! node.data().is_dir() {
+                if !node.data().is_dir() {
                     return Err(Error::new(syscall::ENOTDIR));
                 }
                 Ok(())
             }) {
                 Ok(()) => {
                     state.cwd = path;
-                },
+                }
                 Err(err) => {
                     println!("{}: {}: {:?}", cmd, arg, err);
                 }
             }
-        },
+        }
         "clear" => {
             state.borrow_mut().os.text_clear();
-        },
+        }
         "df" => {
             let state = state.borrow();
 
@@ -231,7 +236,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
             print!("Total: ");
             print_size(total);
             println!();
-        },
+        }
         "echo" => {
             for (i, arg) in args.enumerate() {
                 if i > 0 {
@@ -240,7 +245,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                 print!("{}", arg);
             }
             println!();
-        },
+        }
         "free" => {
             let mut free = 0;
             let mut used = 0;
@@ -249,10 +254,10 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                 match area.kind {
                     OsMemoryKind::Free => {
                         free += area.size;
-                    },
+                    }
                     _ => {
                         used += area.size;
-                    },
+                    }
                 }
                 total += area.size;
             }
@@ -278,12 +283,12 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
             print!("Total: ");
             print_size(total);
             println!();
-        },
+        }
         "history" => {
             for line in state.borrow().history.iter() {
                 println!("{}", line);
             }
-        },
+        }
         "ls" => {
             let mut args: Vec<_> = args.collect();
             if args.is_empty() {
@@ -325,7 +330,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                     println!("{}", name);
                 }
             }
-        },
+        }
         "mkdir" => {
             let mut state = state.borrow_mut();
             for arg in args {
@@ -340,7 +345,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
 
                 match state.fs.tx(|mut tx| {
                     let parent = lookup_node(&mut tx, &path)?;
-                    if ! parent.data().is_dir() {
+                    if !parent.data().is_dir() {
                         return Err(Error::new(syscall::ENOTDIR));
                     }
 
@@ -355,10 +360,10 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                     }
                 }
             }
-        },
+        }
         "rem" => {
             // Comment
-        },
+        }
         "rm" => {
             let mut state = state.borrow_mut();
             for arg in args {
@@ -373,7 +378,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
 
                 match state.fs.tx(|mut tx| {
                     let parent = lookup_node(&mut tx, &path)?;
-                    if ! parent.data().is_dir() {
+                    if !parent.data().is_dir() {
                         return Err(Error::new(syscall::ENOTDIR));
                     }
 
@@ -386,7 +391,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                     }
                 }
             }
-        },
+        }
         "rmdir" => {
             let mut state = state.borrow_mut();
             for arg in args {
@@ -401,7 +406,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
 
                 match state.fs.tx(|mut tx| {
                     let parent = lookup_node(&mut tx, &path)?;
-                    if ! parent.data().is_dir() {
+                    if !parent.data().is_dir() {
                         return Err(Error::new(syscall::ENOTDIR));
                     }
 
@@ -414,7 +419,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                     }
                 }
             }
-        },
+        }
         #[cfg(all(target_arch = "x86", target_os = "none"))]
         "stack" => unsafe {
             let stack: u32;
@@ -452,7 +457,7 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
 
                 match state.fs.tx(|mut tx| {
                     let parent = lookup_node(&mut tx, &path)?;
-                    if ! parent.data().is_dir() {
+                    if !parent.data().is_dir() {
                         return Err(Error::new(syscall::ENOTDIR));
                     }
 
@@ -467,21 +472,25 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
                     }
                 }
             }
-        },
+        }
         _ => {
             // Look for aliases
             {
-                let alias_opt = state.borrow_mut().aliases.get(cmd).map(|alias| alias.clone());
+                let alias_opt = state
+                    .borrow_mut()
+                    .aliases
+                    .get(cmd)
+                    .map(|alias| alias.clone());
                 if let Some(alias) = alias_opt {
                     let mut line = String::new();
                     for part in alias {
-                        if ! line.is_empty() {
+                        if !line.is_empty() {
                             line.push(' ');
                         }
                         line.push_str(&part);
                     }
                     for arg in args {
-                        if ! line.is_empty() {
+                        if !line.is_empty() {
                             line.push(' ');
                         }
                         line.push_str(arg);
@@ -515,25 +524,18 @@ fn run(state: &Rc<RefCell<State>>, line: &str, level: usize) {
             }
 
             println!("{}: command not found", cmd);
-        },
+        }
     }
 }
 
-pub(crate) fn main<
-    O: Os<OsDisk, VideoModeIter> + 'static,
->(
-    os: O,
-    fs: FileSystem<OsDisk>
-) -> ! {
-    let state = Rc::new(RefCell::new(
-        State {
-            os: Box::new(os),
-            fs,
-            cwd: Vec::new(),
-            aliases: BTreeMap::new(),
-            history: VecDeque::new(),
-        }
-    ));
+pub(crate) fn main<O: Os<OsDisk, VideoModeIter> + 'static>(os: O, fs: FileSystem<OsDisk>) -> ! {
+    let state = Rc::new(RefCell::new(State {
+        os: Box::new(os),
+        fs,
+        cwd: Vec::new(),
+        aliases: BTreeMap::new(),
+        history: VecDeque::new(),
+    }));
 
     run(&state, "call redos/autoexec", 0);
 

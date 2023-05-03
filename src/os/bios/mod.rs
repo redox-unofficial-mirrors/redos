@@ -1,9 +1,5 @@
 use alloc::alloc::{alloc_zeroed, GlobalAlloc, Layout};
-use core::{
-    convert::TryFrom,
-    ptr::NonNull,
-    slice,
-};
+use core::{convert::TryFrom, ptr::NonNull, slice};
 use linked_list_allocator::Heap;
 use redos_abi::AbiTime;
 
@@ -47,15 +43,13 @@ pub struct Allocator;
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        HEAP
-            .allocate_first_fit(layout)
+        HEAP.allocate_first_fit(layout)
             .ok()
             .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        HEAP
-            .deallocate(NonNull::new_unchecked(ptr), layout)
+        HEAP.deallocate(NonNull::new_unchecked(ptr), layout)
     }
 }
 
@@ -73,10 +67,7 @@ pub struct OsBios {
     thunk1a: extern "C" fn(),
 }
 
-impl Os<
-    OsDisk,
-    VideoModeIter
-> for OsBios {
+impl Os<OsDisk, VideoModeIter> for OsBios {
     fn name(&self) -> &str {
         "x86/BIOS"
     }
@@ -87,12 +78,8 @@ impl Os<
         let page_size = self.page_size();
         let pages = (size + page_size - 1) / page_size;
 
-        let ptr = unsafe {
-            alloc_zeroed(Layout::from_size_align(
-                pages * page_size,
-                page_size
-            ).unwrap())
-        };
+        let ptr =
+            unsafe { alloc_zeroed(Layout::from_size_align(pages * page_size, page_size).unwrap()) };
 
         assert!(!ptr.is_null());
         ptr
@@ -102,7 +89,10 @@ impl Os<
         4096
     }
 
-    fn filesystem(&self, password_opt: Option<&[u8]>) -> syscall::Result<redoxfs::FileSystem<OsDisk>> {
+    fn filesystem(
+        &self,
+        password_opt: Option<&[u8]>,
+    ) -> syscall::Result<redoxfs::FileSystem<OsDisk>> {
         let disk = OsDisk::new(u8::try_from(self.boot_disk).unwrap(), self.thunk13);
 
         //TODO: get block from partition table
@@ -127,7 +117,9 @@ impl Os<
         let mut data = ThunkData::new();
         data.eax = 0x4F02;
         data.ebx = mode.id;
-        unsafe { data.with(self.thunk10); }
+        unsafe {
+            data.with(self.thunk10);
+        }
         //TODO: check result
     }
 
@@ -138,12 +130,12 @@ impl Os<
         data.ecx = 0;
         data.edx = 0;
         data.edi = VBE_EDID_ADDR as u32;
-        unsafe { data.with(self.thunk10); }
+        unsafe {
+            data.with(self.thunk10);
+        }
 
         if data.eax == 0x4F {
-            let edid = unsafe {
-                slice::from_raw_parts(VBE_EDID_ADDR as *const u8, 128)
-            };
+            let edid = unsafe { slice::from_raw_parts(VBE_EDID_ADDR as *const u8, 128) };
 
             Some((
                 (edid[0x38] as u32) | (((edid[0x3A] as u32) & 0xF0) << 4),
@@ -158,7 +150,9 @@ impl Os<
     fn get_key(&self) -> OsKey {
         // Read keypress
         let mut data = ThunkData::new();
-        unsafe { data.with(self.thunk16); }
+        unsafe {
+            data.with(self.thunk16);
+        }
         match (data.eax >> 8) as u8 {
             0x4B => OsKey::Left,
             0x4D => OsKey::Right,
@@ -170,7 +164,7 @@ impl Os<
             _ => match data.eax as u8 {
                 0 => OsKey::Other,
                 b => OsKey::Char(b as char),
-            }
+            },
         }
     }
 
@@ -181,9 +175,7 @@ impl Os<
     }
 
     fn get_text_position(&self) -> (usize, usize) {
-        unsafe {
-            (VGA.x, VGA.y)
-        }
+        unsafe { (VGA.x, VGA.y) }
     }
 
     fn set_text_position(&self, x: usize, y: usize) {
@@ -201,7 +193,10 @@ impl Os<
     }
 
     fn time(&self, time: &mut AbiTime) {
-        time::Time { thunk1a: self.thunk1a }.read(time)
+        time::Time {
+            thunk1a: self.thunk1a,
+        }
+        .read(time)
     }
 
     fn delay_us(&self, microseconds: u32) {
@@ -209,7 +204,9 @@ impl Os<
         data.eax = 0x8600;
         data.ecx = (microseconds >> 16) & 0xFFFF;
         data.edx = microseconds & 0xFFFF;
-        unsafe { data.with(self.thunk15); }
+        unsafe {
+            data.with(self.thunk15);
+        }
     }
 }
 
@@ -262,8 +259,7 @@ pub unsafe extern "C" fn start(
     // Clear screen
     VGA.clear();
 
-    let (heap_start, heap_size) = memory_map(os.thunk15)
-        .expect("No memory for heap");
+    let (heap_start, heap_size) = memory_map(os.thunk15).expect("No memory for heap");
 
     HEAP.init(heap_start as *mut u8, heap_size);
 

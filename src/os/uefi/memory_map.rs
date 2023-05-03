@@ -26,8 +26,9 @@ impl MemoryMapIter {
             map.as_mut_ptr() as *mut MemoryDescriptor,
             &mut map_key,
             &mut descriptor_size,
-            &mut descriptor_version
-        )).expect("Failed to get UEFI memory map");
+            &mut descriptor_version,
+        ))
+        .expect("Failed to get UEFI memory map");
 
         // Ensure descriptor size is usable
         assert!(descriptor_size >= mem::size_of::<MemoryDescriptor>());
@@ -47,9 +48,9 @@ impl MemoryMapIter {
 }
 
 impl Iterator for MemoryMapIter {
-    type Item=OsMemoryEntry;
+    type Item = OsMemoryEntry;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.i < self.map.len()/self.descriptor_size {
+        if self.i < self.map.len() / self.descriptor_size {
             let descriptor_ptr = unsafe { self.map.as_ptr().add(self.i * self.descriptor_size) };
             self.i += 1;
 
@@ -61,18 +62,14 @@ impl Iterator for MemoryMapIter {
                 //TODO: do not hard code page size
                 size: descriptor.NumberOfPages * 4096,
                 kind: match descriptor_type {
-                    MemoryType::EfiLoaderCode |
-                    MemoryType::EfiLoaderData |
-                    MemoryType::EfiBootServicesCode |
-                    MemoryType::EfiBootServicesData |
-                    MemoryType::EfiConventionalMemory => {
-                        OsMemoryKind::Free
-                    },
+                    MemoryType::EfiLoaderCode
+                    | MemoryType::EfiLoaderData
+                    | MemoryType::EfiBootServicesCode
+                    | MemoryType::EfiBootServicesData
+                    | MemoryType::EfiConventionalMemory => OsMemoryKind::Free,
                     //TODO: mark ACPI memory as reclaim
-                    _ => {
-                        OsMemoryKind::Reserved
-                    }
-                }
+                    _ => OsMemoryKind::Reserved,
+                },
             })
         } else {
             None

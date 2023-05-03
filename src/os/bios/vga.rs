@@ -29,10 +29,7 @@ impl Vga {
     }
 
     pub unsafe fn blocks(&mut self) -> &'static mut [VgaTextBlock] {
-        slice::from_raw_parts_mut(
-            self.base as *mut VgaTextBlock,
-            self.width * self.height,
-        )
+        slice::from_raw_parts_mut(self.base as *mut VgaTextBlock, self.width * self.height)
     }
 
     pub fn clear(&mut self) {
@@ -70,16 +67,18 @@ impl fmt::Write for Vga {
                 self.y -= 1;
             }
             match c {
-                '\x08' => if self.x > 0 {
-                    self.x -= 1;
-                },
+                '\x08' => {
+                    if self.x > 0 {
+                        self.x -= 1;
+                    }
+                }
                 '\r' => {
                     self.x = 0;
-                },
+                }
                 '\n' => {
                     self.x = 0;
                     self.y += 1;
-                },
+                }
                 _ => {
                     let i = self.y * self.width + self.x;
                     if let Some(block) = blocks.get_mut(i) {

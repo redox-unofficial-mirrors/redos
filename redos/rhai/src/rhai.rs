@@ -24,9 +24,7 @@ pub(crate) fn rhai(args: &[&str]) {
 
     let mut engine = rhai::Engine::new();
     engine.on_print(|string| println!("{}", string));
-    engine.on_debug(|string, src, pos| {
-        println!("debug {:?} at {:?}: {}", src, pos, string)
-    });
+    engine.on_debug(|string, src, pos| println!("debug {:?} at {:?}: {}", src, pos, string));
 
     engine.register_fn("text_clear", move || {
         abi().text_clear();
@@ -36,9 +34,7 @@ pub(crate) fn rhai(args: &[&str]) {
         abi().text_color(color);
     });
 
-    engine.register_fn("key", move || -> char {
-        abi().key()
-    });
+    engine.register_fn("key", move || -> char { abi().key() });
 
     engine.register_fn("prompt", move |prompt: &str| -> String {
         print!("{}", prompt);
@@ -69,13 +65,19 @@ pub(crate) fn rhai(args: &[&str]) {
     }
     */
 
-    engine.register_fn("open", move |path: &str| -> Result<usize, Box<rhai::EvalAltResult>> {
-        abi().open(path).map_err(rhai_err)
-    });
+    engine.register_fn(
+        "open",
+        move |path: &str| -> Result<usize, Box<rhai::EvalAltResult>> {
+            abi().open(path).map_err(rhai_err)
+        },
+    );
 
-    engine.register_fn("read", move |fd: usize| -> Result<String, Box<rhai::EvalAltResult>> {
-        abi().read_to_string(fd).map_err(rhai_err)
-    });
+    engine.register_fn(
+        "read",
+        move |fd: usize| -> Result<String, Box<rhai::EvalAltResult>> {
+            abi().read_to_string(fd).map_err(rhai_err)
+        },
+    );
 
     /*TODO: implement
     {
@@ -112,10 +114,7 @@ pub(crate) fn rhai(args: &[&str]) {
 
     let mut scope = rhai::Scope::new();
 
-    let args_rhai: rhai::Array = args.iter()
-        .skip(1)
-        .map(|x| (*x).into())
-        .collect();
+    let args_rhai: rhai::Array = args.iter().skip(1).map(|x| (*x).into()).collect();
     scope.push("args", args_rhai);
 
     if let Some((path, script)) = script_opt {

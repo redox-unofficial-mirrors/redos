@@ -4,7 +4,7 @@
 extern crate redos_abi;
 
 use hwio::{Io, Pio, WriteOnly};
-use redos_abi::{AbiTime, rt::abi};
+use redos_abi::{rt::abi, AbiTime};
 use redos_hw::sb16::Sb16;
 
 pub const MILLIS_PER_SEC: u128 = 1_000;
@@ -66,5 +66,8 @@ pub extern "C" fn main() {
         }
     };
 
-    println!("Sound Blaster 16 DSP {}.{:02}", blaster.version.0, blaster.version.1);
+    println!(
+        "Sound Blaster 16 DSP {}.{:02}",
+        blaster.version.0, blaster.version.1
+    );
 }

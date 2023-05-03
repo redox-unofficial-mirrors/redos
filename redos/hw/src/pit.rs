@@ -56,7 +56,8 @@ impl Pit {
         //TODO: critical code wrapper
         unsafe { asm!("pushf") };
         unsafe { asm!("cli") };
-        self.cmd.write(Self::CMD_CHAN_2 | Self::CMD_ACCESS_LOW_HIGH | Self::CMD_MODE_3);
+        self.cmd
+            .write(Self::CMD_CHAN_2 | Self::CMD_ACCESS_LOW_HIGH | Self::CMD_MODE_3);
         self.chan_2.write(div as u8);
         self.chan_2.write((div >> 8) as u8);
         unsafe { asm!("popf") };

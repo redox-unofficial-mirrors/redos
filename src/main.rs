@@ -5,7 +5,7 @@
     target_os = "uefi",
     no_main,
     feature(control_flow_enum),
-    feature(try_trait_v2),
+    feature(try_trait_v2)
 )]
 
 #[cfg_attr(target_os = "none", macro_use)]
@@ -15,14 +15,10 @@ extern crate alloc;
 #[macro_use]
 extern crate uefi_std as std;
 
-use alloc::{
-    string::String,
-};
+use alloc::string::String;
 use core::{
     fmt::{self, Write},
-    ptr,
-    slice,
-    str,
+    ptr, slice, str,
 };
 use redoxfs::Disk;
 
@@ -60,10 +56,9 @@ impl<'a> Write for SliceWriter<'a> {
     }
 }
 
-fn redoxfs<
-    D: Disk,
-    V: Iterator<Item=OsVideoMode>
->(os: &mut dyn Os<D, V>) -> (redoxfs::FileSystem<D>, Option<&'static [u8]>) {
+fn redoxfs<D: Disk, V: Iterator<Item = OsVideoMode>>(
+    os: &mut dyn Os<D, V>,
+) -> (redoxfs::FileSystem<D>, Option<&'static [u8]>) {
     let attempts = 10;
     for attempt in 0..=attempts {
         let mut password_opt = None;
@@ -74,14 +69,16 @@ fn redoxfs<
 
             loop {
                 match os.get_key() {
-                    OsKey::Backspace | OsKey::Delete => if ! password.is_empty() {
-                        print!("\x08 \x08");
-                        password.pop();
-                    },
+                    OsKey::Backspace | OsKey::Delete => {
+                        if !password.is_empty() {
+                            print!("\x08 \x08");
+                            password.pop();
+                        }
+                    }
                     OsKey::Char(c) => {
                         print!("*");
                         password.push(c)
-                    },
+                    }
                     OsKey::Enter => break,
                     _ => (),
                 }
@@ -92,27 +89,32 @@ fn redoxfs<
                 print!("\x08 \x08");
             }
 
-            if ! password.is_empty() {
+            if !password.is_empty() {
                 password_opt = Some(password);
             }
         }
         match os.filesystem(password_opt.as_ref().map(|x| x.as_bytes())) {
-            Ok(fs) => return (fs, password_opt.map(|password| {
-                // Copy password to page aligned memory
-                let password_size = password.len();
-                let password_base = os.alloc_zeroed_page_aligned(password_size);
-                unsafe {
-                    ptr::copy(password.as_ptr(), password_base, password_size);
-                    slice::from_raw_parts(password_base, password_size)
-                }
-            })),
+            Ok(fs) => {
+                return (
+                    fs,
+                    password_opt.map(|password| {
+                        // Copy password to page aligned memory
+                        let password_size = password.len();
+                        let password_base = os.alloc_zeroed_page_aligned(password_size);
+                        unsafe {
+                            ptr::copy(password.as_ptr(), password_base, password_size);
+                            slice::from_raw_parts(password_base, password_size)
+                        }
+                    }),
+                )
+            }
             Err(err) => match err.errno {
                 // Incorrect password, try again
                 syscall::ENOKEY => (),
                 _ => {
                     panic!("Failed to open RedoxFS: {}", err);
                 }
-            }
+            },
         }
     }
     panic!("RedoxFS out of unlock attempts");
@@ -122,22 +124,30 @@ fn elf_entry(data: &[u8]) -> (u64, bool) {
     match (data[4], data[5]) {
         // 32-bit, little endian
         (1, 1) => (
-            u32::from_le_bytes(<[u8; 4]>::try_from(&data[0x18..0x18 + 4]).expect("conversion cannot fail")) as u64,
+            u32::from_le_bytes(
+                <[u8; 4]>::try_from(&data[0x18..0x18 + 4]).expect("conversion cannot fail"),
+            ) as u64,
             false,
         ),
         // 32-bit, big endian
         (1, 2) => (
-            u32::from_be_bytes(<[u8; 4]>::try_from(&data[0x18..0x18 + 4]).expect("conversion cannot fail")) as u64,
+            u32::from_be_bytes(
+                <[u8; 4]>::try_from(&data[0x18..0x18 + 4]).expect("conversion cannot fail"),
+            ) as u64,
             false,
         ),
         // 64-bit, little endian
         (2, 1) => (
-            u64::from_le_bytes(<[u8; 8]>::try_from(&data[0x18..0x18 + 8]).expect("conversion cannot fail")),
+            u64::from_le_bytes(
+                <[u8; 8]>::try_from(&data[0x18..0x18 + 8]).expect("conversion cannot fail"),
+            ),
             true,
         ),
         // 64-bit, big endian
         (2, 2) => (
-            u64::from_be_bytes(<[u8; 8]>::try_from(&data[0x18..0x18 + 8]).expect("conversion cannot fail")),
+            u64::from_be_bytes(
+                <[u8; 8]>::try_from(&data[0x18..0x18 + 8]).expect("conversion cannot fail"),
+            ),
             true,
         ),
         (ei_class, ei_data) => {
@@ -146,10 +156,12 @@ fn elf_entry(data: &[u8]) -> (u64, bool) {
     }
 }
 
-fn main<
-    O: Os<OsDisk, VideoModeIter> + 'static,
->(mut os: O) -> ! {
-    println!("Redox OS Bootloader {} on {}", env!("CARGO_PKG_VERSION"), os.name());
+fn main<O: Os<OsDisk, VideoModeIter> + 'static>(mut os: O) -> ! {
+    println!(
+        "Redox OS Bootloader {} on {}",
+        env!("CARGO_PKG_VERSION"),
+        os.name()
+    );
 
     let (fs, _password_opt) = redoxfs(&mut os);
 

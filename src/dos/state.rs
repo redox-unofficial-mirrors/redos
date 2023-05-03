@@ -7,9 +7,9 @@ use alloc::{
 use redoxfs::{FileSystem, TreePtr};
 use syscall::Error;
 
-use crate::{Os, OsKey};
-use crate::os::{OsDisk, VideoModeIter};
 use super::lookup_node;
+use crate::os::{OsDisk, VideoModeIter};
+use crate::{Os, OsKey};
 
 pub struct State {
     pub os: Box<dyn Os<OsDisk, VideoModeIter>>,
@@ -52,7 +52,13 @@ impl State {
         self.fs.tx(move |tx| {
             //TODO: time
             let (atime, atime_nsec) = (0, 0);
-            tx.read_node(TreePtr::new(fd as u32), offset as u64, buf, atime, atime_nsec)
+            tx.read_node(
+                TreePtr::new(fd as u32),
+                offset as u64,
+                buf,
+                atime,
+                atime_nsec,
+            )
         })
     }
 
@@ -60,7 +66,13 @@ impl State {
         self.fs.tx(move |tx| {
             //TODO: time
             let (mtime, mtime_nsec) = (0, 0);
-            tx.write_node(TreePtr::new(fd as u32), offset as u64, buf, mtime, mtime_nsec)
+            tx.write_node(
+                TreePtr::new(fd as u32),
+                offset as u64,
+                buf,
+                mtime,
+                mtime_nsec,
+            )
         })
     }
 
@@ -126,51 +138,59 @@ impl State {
             }
 
             match key {
-                OsKey::Left => if cursor > 0 {
-                    let mut before_opt = None;
-                    for (i, _) in line.char_indices() {
-                        if i < cursor {
-                            before_opt = Some(i);
+                OsKey::Left => {
+                    if cursor > 0 {
+                        let mut before_opt = None;
+                        for (i, _) in line.char_indices() {
+                            if i < cursor {
+                                before_opt = Some(i);
+                            } else {
+                                break;
+                            }
+                        }
+                        if let Some(before) = before_opt {
+                            cursor = before;
+                        }
+                    }
+                }
+                OsKey::Right => {
+                    if cursor < line.len() {
+                        let mut after_opt = None;
+                        for (i, _) in line.char_indices() {
+                            if i > cursor {
+                                after_opt = Some(i);
+                                break;
+                            }
+                        }
+                        if let Some(after) = after_opt {
+                            cursor = after;
                         } else {
-                            break;
+                            cursor = line.len();
                         }
                     }
-                    if let Some(before) = before_opt {
-                        cursor = before;
-                    }
-                },
-                OsKey::Right => if cursor < line.len() {
-                    let mut after_opt = None;
-                    for (i, _) in line.char_indices() {
-                        if i > cursor {
-                            after_opt = Some(i);
-                            break;
+                }
+                OsKey::Up => {
+                    if history_i > 0 {
+                        history_i -= 1;
+
+                        line.clear();
+                        if let Some(history) = self.history.get(history_i) {
+                            line.push_str(&history);
                         }
-                    }
-                    if let Some(after) = after_opt {
-                        cursor = after;
-                    } else {
                         cursor = line.len();
                     }
-                },
-                OsKey::Up => if history_i > 0 {
-                    history_i -= 1;
+                }
+                OsKey::Down => {
+                    if history_i < self.history.len() {
+                        history_i += 1;
 
-                    line.clear();
-                    if let Some(history) = self.history.get(history_i) {
-                        line.push_str(&history);
+                        line.clear();
+                        if let Some(history) = self.history.get(history_i) {
+                            line.push_str(&history)
+                        }
+                        cursor = line.len();
                     }
-                    cursor = line.len();
-                },
-                OsKey::Down => if history_i < self.history.len() {
-                    history_i += 1;
-
-                    line.clear();
-                    if let Some(history) = self.history.get(history_i) {
-                        line.push_str(&history)
-                    }
-                    cursor = line.len();
-                },
+                }
                 OsKey::Backspace => {
                     let mut before_opt = None;
                     for (i, _) in line.char_indices() {
@@ -184,10 +204,12 @@ impl State {
                         let c = line.remove(before);
                         cursor -= c.len_utf8();
                     }
-                },
-                OsKey::Delete => if cursor < line.len() {
-                    line.remove(cursor);
-                },
+                }
+                OsKey::Delete => {
+                    if cursor < line.len() {
+                        line.remove(cursor);
+                    }
+                }
                 OsKey::Char(c) => {
                     // Ensure this does not wrap
                     //TODO: support widths other than 80?
@@ -195,10 +217,10 @@ impl State {
                         line.insert(cursor, c);
                         cursor += c.len_utf8();
                     }
-                },
+                }
                 OsKey::Enter => {
                     break;
-                },
+                }
                 _ => (),
             }
         }

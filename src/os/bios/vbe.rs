@@ -83,7 +83,9 @@ impl VideoModeIter {
         let mut data = ThunkData::new();
         data.eax = 0x4F00;
         data.edi = VBE_CARD_INFO_ADDR as u32;
-        unsafe { data.with(thunk10); }
+        unsafe {
+            data.with(thunk10);
+        }
         let mode_ptr = if data.eax == 0x004F {
             let card_info = unsafe { ptr::read(VBE_CARD_INFO_ADDR as *const VbeCardInfo) };
             unsafe { card_info.videomodeptr.as_ptr::<u16>() }
@@ -91,10 +93,7 @@ impl VideoModeIter {
             println!("Failed to read VBE card info: 0x{:04X}", { data.eax });
             ptr::null()
         };
-        Self {
-            thunk10,
-            mode_ptr
-        }
+        Self { thunk10, mode_ptr }
     }
 }
 
@@ -118,7 +117,9 @@ impl Iterator for VideoModeIter {
             data.eax = 0x4F01;
             data.ecx = mode as u32;
             data.edi = VBE_MODE_INFO_ADDR as u32;
-            unsafe { data.with(self.thunk10); }
+            unsafe {
+                data.with(self.thunk10);
+            }
             if data.eax == 0x004F {
                 let mode_info = unsafe { ptr::read(VBE_MODE_INFO_ADDR as *const VbeModeInfo) };
 
@@ -140,7 +141,9 @@ impl Iterator for VideoModeIter {
                     base: mode_info.physbaseptr as u64,
                 });
             } else {
-                println!("Failed to read VBE mode 0x{:04X} info: 0x{:04X}", mode, { data.eax });
+                println!("Failed to read VBE mode 0x{:04X} info: 0x{:04X}", mode, {
+                    data.eax
+                });
             }
         }
     }

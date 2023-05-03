@@ -1,22 +1,8 @@
-use alloc::{
-    rc::Rc,
-    string::ToString,
-    vec::Vec,
-};
-use core::{
-    cell::RefCell,
-    mem,
-    ptr,
-    slice,
-    str,
-};
-use redos_abi::{Abi, AbiData, AbiTime, error::Error};
+use alloc::{rc::Rc, string::ToString, vec::Vec};
+use core::{cell::RefCell, mem, ptr, slice, str};
+use redos_abi::{error::Error, Abi, AbiData, AbiTime};
 
-use crate::dos::{
-    lookup_node,
-    read_node,
-    state::State
-};
+use crate::dos::{lookup_node, read_node, state::State};
 
 unsafe fn abi_state(data: AbiData) -> &'static Rc<RefCell<State>> {
     &*(data.0 as *const Rc<RefCell<State>>)
@@ -82,17 +68,29 @@ extern "C" fn abi_open(data: AbiData, ptr: *const u8, len: usize) -> usize {
     let slice = unsafe { slice::from_raw_parts(ptr, len) };
     Error::mux(match str::from_utf8(slice) {
         Ok(path) => state.borrow_mut().open(path),
-        Err(_err) => Err(Error::new(syscall::EINVAL))
+        Err(_err) => Err(Error::new(syscall::EINVAL)),
     })
 }
 
-extern "C" fn abi_pread(data: AbiData, fd: usize, ptr: *mut u8, len: usize, offset: usize) -> usize {
+extern "C" fn abi_pread(
+    data: AbiData,
+    fd: usize,
+    ptr: *mut u8,
+    len: usize,
+    offset: usize,
+) -> usize {
     let state = unsafe { abi_state(data) };
     let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
     Error::mux(state.borrow_mut().pread(fd, slice, offset))
 }
 
-extern "C" fn abi_pwrite(data: AbiData, fd: usize, ptr: *const u8, len: usize, offset: usize) -> usize {
+extern "C" fn abi_pwrite(
+    data: AbiData,
+    fd: usize,
+    ptr: *const u8,
+    len: usize,
+    offset: usize,
+) -> usize {
     let state = unsafe { abi_state(data) };
     let slice = unsafe { slice::from_raw_parts(ptr, len) };
     Error::mux(state.borrow_mut().pwrite(fd, slice, offset))
@@ -103,13 +101,10 @@ extern "C" fn abi_truncate(data: AbiData, fd: usize, size: usize) -> usize {
     Error::mux(state.borrow_mut().truncate(fd, size).and(Ok(size)))
 }
 
-pub(crate) fn elf<
-    'i,
-    I: Iterator<Item=&'i str>,
->(
+pub(crate) fn elf<'i, I: Iterator<Item = &'i str>>(
     state: &Rc<RefCell<State>>,
     path: &str,
-    args: I
+    args: I,
 ) {
     let mut path_parts = if path.starts_with("/") {
         Vec::new()

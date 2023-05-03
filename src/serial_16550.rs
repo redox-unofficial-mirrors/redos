@@ -1,9 +1,9 @@
 use bitflags::bitflags;
 use core::convert::TryInto;
 use core::fmt;
-use syscall::io::{Io, Mmio, ReadOnly};
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use syscall::io::Pio;
+use syscall::io::{Io, Mmio, ReadOnly};
 
 bitflags! {
     /// Interrupt enable flags
@@ -88,19 +88,13 @@ where
 
     fn line_sts(&self) -> LineStsFlags {
         LineStsFlags::from_bits_truncate(
-            (self.line_sts.read() & 0xFF.into())
-                .try_into()
-                .unwrap_or(0),
+            (self.line_sts.read() & 0xFF.into()).try_into().unwrap_or(0),
         )
     }
 
     pub fn receive(&mut self) -> Option<u8> {
         if self.line_sts().contains(LineStsFlags::INPUT_FULL) {
-            Some(
-                (self.data.read() & 0xFF.into())
-                    .try_into()
-                    .unwrap_or(0),
-            )
+            Some((self.data.read() & 0xFF.into()).try_into().unwrap_or(0))
         } else {
             None
         }
@@ -132,7 +126,9 @@ where
 }
 
 impl<T: Io> fmt::Write for SerialPort<T>
-where T::Value: From<u8> + TryInto<u8> {
+where
+    T::Value: From<u8> + TryInto<u8>,
+{
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.write(s.as_bytes());
         Ok(())

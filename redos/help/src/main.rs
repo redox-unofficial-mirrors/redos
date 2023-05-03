@@ -41,7 +41,7 @@ pub extern "C" fn main() {
                     found = true;
                 }
             }
-            if ! found {
+            if !found {
                 println!("help: {} not found", arg);
             }
         }

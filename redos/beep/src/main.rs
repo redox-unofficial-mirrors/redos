@@ -4,7 +4,7 @@
 extern crate redos_abi;
 
 use hwio::{Io, Pio, WriteOnly};
-use redos_abi::{AbiTime, rt::abi};
+use redos_abi::{rt::abi, AbiTime};
 use redos_hw::{pcspkr::PcSpeaker, pit::Pit};
 
 pub const NANOS_PER_SEC: u128 = 1_000_000_000;
@@ -58,7 +58,16 @@ fn delay(millis: u32) {
 }
 
 fn print_time(time: &AbiTime) {
-    println!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}", time.year, time.month, time.day, time.hour, time.minute, time.second, time.nanosecond / 1_000_000);
+    println!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+        time.year,
+        time.month,
+        time.day,
+        time.hour,
+        time.minute,
+        time.second,
+        time.nanosecond / 1_000_000
+    );
 }
 
 const C2: u32 = 65;
@@ -117,7 +126,7 @@ pub extern "C" fn main() {
     abi().time(&mut time);
     print_time(&time);
 
-    const BPM: u32 = 200;
+    const BPM: u32 = 240;
     const QUARTER: u32 = 60000 / BPM;
     const HALF: u32 = QUARTER * 2;
     const EIGHTH: u32 = QUARTER / 2;
@@ -159,7 +168,6 @@ pub extern "C" fn main() {
     note(E2, EIGHTH);
     note(E2, EIGHTH);
     note(Bb2, HALF);
-
 
     note(E2, EIGHTH);
     note(E2, EIGHTH);
@@ -210,7 +218,6 @@ pub extern "C" fn main() {
     note(G4, SIXTEENTH);
     note(B4, SIXTEENTH);
 
-
     note(A2, EIGHTH);
     note(A2, EIGHTH);
     note(A3, EIGHTH);
@@ -247,7 +254,6 @@ pub extern "C" fn main() {
     note(A2, EIGHTH);
     note(A2, EIGHTH);
     note(Eb3, HALF);
-
 
     note(A2, EIGHTH);
     note(A2, EIGHTH);
@@ -298,7 +304,6 @@ pub extern "C" fn main() {
     note(E4, SIXTEENTH);
     note(C4, SIXTEENTH);
 
-
     note(E2, EIGHTH);
     note(E2, EIGHTH);
     note(E3, EIGHTH);
@@ -336,7 +341,6 @@ pub extern "C" fn main() {
     note(E2, EIGHTH);
     note(Bb2, HALF);
 
-
     note(E2, EIGHTH);
     note(E2, EIGHTH);
     note(E3, EIGHTH);
@@ -373,7 +377,6 @@ pub extern "C" fn main() {
     note(E2, EIGHTH);
     note(E2, EIGHTH);
     note(Bb2, HALF);
-
 
     note(Db3, EIGHTH);
     note(Db3, EIGHTH);
@@ -411,7 +414,6 @@ pub extern "C" fn main() {
     note(A2, EIGHTH);
     note(A2, EIGHTH);
     note(F3, HALF);
-
 
     note(E2, EIGHTH);
     note(E2, EIGHTH);

@@ -3,27 +3,20 @@ use core::{
     cell::RefCell,
     mem,
     ops::{ControlFlow, Try},
-    ptr,
-    slice
+    ptr, slice,
 };
 use redos_abi::AbiTime;
-use std::{
-    proto::Protocol,
-};
+use std::proto::Protocol;
 use uefi::{
-    Handle,
     boot::LocateSearchType,
     memory::MemoryType,
     status::{Result, Status},
     system::SystemTable,
     text::TextInputKey,
+    Handle,
 };
 
-use crate::os::{
-    Os,
-    OsKey,
-    OsVideoMode,
-};
+use crate::os::{Os, OsKey, OsVideoMode};
 
 use self::display::{EdidActive, Output};
 
@@ -50,14 +43,13 @@ pub(crate) fn alloc_zeroed_page_aligned(size: usize) -> *mut u8 {
     let ptr = {
         // Max address mapped by src/arch paging code (8 GiB)
         let mut ptr = 0x2_0000_0000;
-        status_to_result(
-            (std::system_table().BootServices.AllocatePages)(
-                1, // AllocateMaxAddress
-                MemoryType::EfiRuntimeServicesData, // Keeps this memory out of free space list
-                pages,
-                &mut ptr
-            )
-        ).unwrap();
+        status_to_result((std::system_table().BootServices.AllocatePages)(
+            1,                                  // AllocateMaxAddress
+            MemoryType::EfiRuntimeServicesData, // Keeps this memory out of free space list
+            pages,
+            &mut ptr,
+        ))
+        .unwrap();
         ptr as *mut u8
     };
 
@@ -79,17 +71,17 @@ impl OsEfi {
             let guid = Output::guid();
             let mut handles = Vec::with_capacity(256);
             let mut len = handles.capacity() * mem::size_of::<Handle>();
-            match status_to_result(
-                (st.BootServices.LocateHandle)(
-                    LocateSearchType::ByProtocol,
-                    &guid,
-                    0,
-                    &mut len,
-                    handles.as_mut_ptr()
-                )
-            ) {
+            match status_to_result((st.BootServices.LocateHandle)(
+                LocateSearchType::ByProtocol,
+                &guid,
+                0,
+                &mut len,
+                handles.as_mut_ptr(),
+            )) {
                 Ok(_) => {
-                    unsafe { handles.set_len(len / mem::size_of::<Handle>()); }
+                    unsafe {
+                        handles.set_len(len / mem::size_of::<Handle>());
+                    }
                     'handles: for handle in handles {
                         //TODO: do we have to query all modes to get good edid?
                         match Output::handle_protocol(handle) {
@@ -99,7 +91,9 @@ impl OsEfi {
                                 }
 
                                 for other_output in outputs.iter() {
-                                    if output.0.Mode.FrameBufferBase == other_output.0.0.Mode.FrameBufferBase {
+                                    if output.0.Mode.FrameBufferBase
+                                        == other_output.0 .0.Mode.FrameBufferBase
+                                    {
                                         continue 'handles;
                                     }
                                 }
@@ -109,18 +103,24 @@ impl OsEfi {
                                     match EdidActive::handle_protocol(handle) {
                                         Ok(efi_edid) => Some(efi_edid),
                                         Err(err) => {
-                                            println!("Failed to get EFI EDID from handle {:?}: {:?}", handle, err);
+                                            println!(
+                                                "Failed to get EFI EDID from handle {:?}: {:?}",
+                                                handle, err
+                                            );
                                             None
                                         }
-                                    }
+                                    },
                                 ));
-                            },
+                            }
                             Err(err) => {
-                                println!("Failed to get Output from handle {:?}: {:?}", handle, err);
+                                println!(
+                                    "Failed to get Output from handle {:?}: {:?}",
+                                    handle, err
+                                );
                             }
                         }
                     }
-                },
+                }
                 Err(err) => {
                     println!("Failed to locate Outputs: {:?}", err);
                 }
@@ -133,10 +133,7 @@ impl OsEfi {
     }
 }
 
-impl Os<
-    OsDisk,
-    VideoModeIter
-> for OsEfi {
+impl Os<OsDisk, VideoModeIter> for OsEfi {
     #[cfg(target_arch = "aarch64")]
     fn name(&self) -> &str {
         "aarch64/UEFI"
@@ -155,9 +152,12 @@ impl Os<
         page_size()
     }
 
-    fn filesystem(&self, password_opt: Option<&[u8]>) -> syscall::Result<redoxfs::FileSystem<OsDisk>> {
+    fn filesystem(
+        &self,
+        password_opt: Option<&[u8]>,
+    ) -> syscall::Result<redoxfs::FileSystem<OsDisk>> {
         for block_io in OsDisk::all().into_iter() {
-            if ! block_io.0.Media.MediaPresent {
+            if !block_io.0.Media.MediaPresent {
                 continue;
             }
 
@@ -171,7 +171,7 @@ impl Os<
                         _ => {
                             println!("BlockIo error: {:?}", err);
                         }
-                    }
+                    },
                 }
             } else {
                 //TODO: get block from partition table
@@ -184,7 +184,7 @@ impl Os<
                         _ => {
                             println!("BlockIo error: {:?}", err);
                         }
-                    }
+                    },
                 }
             }
         }
@@ -203,7 +203,7 @@ impl Os<
         let output_opt = match self.outputs.borrow_mut().get_mut(output_i) {
             Some(output) => unsafe {
                 // Hack to enable clone
-                let ptr = output.0.0 as *mut _;
+                let ptr = output.0 .0 as *mut _;
                 Some(Output::new(&mut *ptr))
             },
             None => None,
@@ -215,9 +215,7 @@ impl Os<
         //TODO: return error?
         let mut outputs = self.outputs.borrow_mut();
         let (output, _efi_edid_opt) = &mut outputs[output_i];
-        status_to_result(
-            (output.0.SetMode)(output.0, mode.id)
-        ).unwrap();
+        status_to_result((output.0.SetMode)(output.0, mode.id)).unwrap();
 
         // Update with actual mode information
         mode.width = output.0.Mode.Info.HorizontalResolution;
@@ -230,9 +228,8 @@ impl Os<
         let (output, efi_edid_opt) = outputs.get_mut(output_i)?;
 
         if let Some(efi_edid) = efi_edid_opt {
-            let edid = unsafe {
-                slice::from_raw_parts(efi_edid.0.Edid, efi_edid.0.SizeOfEdid as usize)
-            };
+            let edid =
+                unsafe { slice::from_raw_parts(efi_edid.0.Edid, efi_edid.0.SizeOfEdid as usize) };
 
             if edid.len() > 0x3D {
                 return Some((
@@ -255,17 +252,22 @@ impl Os<
         //TODO: do not unwrap
 
         let mut index = 0;
-        status_to_result(
-            (self.st.BootServices.WaitForEvent)(1, &self.st.ConsoleIn.WaitForKey, &mut index)
-        ).unwrap();
+        status_to_result((self.st.BootServices.WaitForEvent)(
+            1,
+            &self.st.ConsoleIn.WaitForKey,
+            &mut index,
+        ))
+        .unwrap();
 
         let mut key = TextInputKey {
             ScanCode: 0,
-            UnicodeChar: 0
+            UnicodeChar: 0,
         };
-        status_to_result(
-            (self.st.ConsoleIn.ReadKeyStroke)(self.st.ConsoleIn, &mut key)
-        ).unwrap();
+        status_to_result((self.st.ConsoleIn.ReadKeyStroke)(
+            self.st.ConsoleIn,
+            &mut key,
+        ))
+        .unwrap();
 
         match key.ScanCode {
             0 => match key.UnicodeChar {
@@ -287,9 +289,7 @@ impl Os<
 
     fn text_clear(&self) {
         //TODO: why does this sometimes return InvalidParameter, but otherwise appear to work?
-        let _ = status_to_result(
-            (self.st.ConsoleOut.ClearScreen)(self.st.ConsoleOut)
-        );
+        let _ = status_to_result((self.st.ConsoleOut.ClearScreen)(self.st.ConsoleOut));
     }
 
     fn get_text_position(&self) -> (usize, usize) {
@@ -300,22 +300,29 @@ impl Os<
     }
 
     fn set_text_position(&self, x: usize, y: usize) {
-        status_to_result(
-            (self.st.ConsoleOut.SetCursorPosition)(self.st.ConsoleOut, x, y)
-        ).unwrap();
+        status_to_result((self.st.ConsoleOut.SetCursorPosition)(
+            self.st.ConsoleOut,
+            x,
+            y,
+        ))
+        .unwrap();
     }
 
     fn set_text_color(&self, color: u8) {
-        status_to_result(
-            (self.st.ConsoleOut.SetAttribute)(self.st.ConsoleOut, color as usize)
-        ).unwrap();
+        status_to_result((self.st.ConsoleOut.SetAttribute)(
+            self.st.ConsoleOut,
+            color as usize,
+        ))
+        .unwrap();
     }
 
     fn time(&self, time: &mut AbiTime) {
         let mut uefi_time = uefi::time::Time::default();
-        status_to_result(
-            (self.st.RuntimeServices.GetTime)(&mut uefi_time, ptr::null_mut())
-        ).unwrap();
+        status_to_result((self.st.RuntimeServices.GetTime)(
+            &mut uefi_time,
+            ptr::null_mut(),
+        ))
+        .unwrap();
         time.year = uefi_time.Year;
         time.month = uefi_time.Month;
         time.day = uefi_time.Day;
@@ -341,7 +348,10 @@ fn set_max_mode(output: &uefi::text::TextOutput) -> Result<()> {
     for i in 0..output.Mode.MaxMode as usize {
         let mut w = 0;
         let mut h = 0;
-        if (output.QueryMode)(output, i, &mut w, &mut h).branch().is_continue() {
+        if (output.QueryMode)(output, i, &mut w, &mut h)
+            .branch()
+            .is_continue()
+        {
             if w >= max_w && h >= max_h {
                 max_i = Some(i);
                 max_w = w;

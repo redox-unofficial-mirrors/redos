@@ -1,11 +1,13 @@
 use alloc::{string::String, vec::Vec};
 use hwio::{Io, Pio, ReadOnly, WriteOnly};
 
+use super::isadma::IsaDmaChannel;
+
 #[allow(dead_code)]
 pub struct Sb16 {
     pub version: (u8, u8),
     pub irqs: Vec<u8>,
-    pub dmas: Vec<u8>,
+    pub dmas: Vec<IsaDmaChannel>,
     // Regs
     /* 0x04 */ mixer_addr: WriteOnly<Pio<u8>>,
     /* 0x05 */ mixer_data: Pio<u8>,
@@ -49,7 +51,7 @@ impl Sb16 {
 
     fn dsp_read(&mut self) -> Result<u8, String> {
         // Bit 7 must be 1 before data can be sent
-        while ! self.dsp_read_status.readf(1 << 7) {
+        while !self.dsp_read_status.readf(1 << 7) {
             //TODO: timeout!
         }
 
@@ -120,22 +122,22 @@ impl Sb16 {
             self.dmas.clear();
             let dma_mask = self.mixer_read(0x81);
             if (dma_mask & (1 << 0)) != 0 {
-                self.dmas.push(0);
+                self.dmas.push(IsaDmaChannel::Zero);
             }
             if (dma_mask & (1 << 1)) != 0 {
-                self.dmas.push(1);
+                self.dmas.push(IsaDmaChannel::One);
             }
             if (dma_mask & (1 << 3)) != 0 {
-                self.dmas.push(3);
+                self.dmas.push(IsaDmaChannel::Three);
             }
             if (dma_mask & (1 << 5)) != 0 {
-                self.dmas.push(5);
+                self.dmas.push(IsaDmaChannel::Five);
             }
             if (dma_mask & (1 << 6)) != 0 {
-                self.dmas.push(6);
+                self.dmas.push(IsaDmaChannel::Six);
             }
             if (dma_mask & (1 << 7)) != 0 {
-                self.dmas.push(7);
+                self.dmas.push(IsaDmaChannel::Seven);
             }
         }
 

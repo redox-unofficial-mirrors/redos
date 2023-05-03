@@ -1,5 +1,5 @@
 use core::arch::asm;
-use hwio::{Pio, Io};
+use hwio::{Io, Pio};
 
 pub struct PcSpeaker {
     port: Pio<u8>,

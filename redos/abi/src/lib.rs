@@ -5,10 +5,7 @@
 extern crate alloc;
 
 #[cfg(feature = "alloc")]
-use alloc::{
-    string::String,
-    vec::Vec,
-};
+use alloc::{string::String, vec::Vec};
 
 pub use syscall::error;
 
@@ -48,12 +45,14 @@ pub struct Abi {
     pub abi_set_text_position: extern "C" fn(data: AbiData, x: usize, y: usize),
     pub abi_key: extern "C" fn(data: AbiData) -> u32,
     pub abi_time: extern "C" fn(data: AbiData, time: &mut AbiTime),
-    pub abi_delay_us: extern "C" fn (data: AbiData, microseconds: u32),
+    pub abi_delay_us: extern "C" fn(data: AbiData, microseconds: u32),
     pub abi_alloc: extern "C" fn(data: AbiData, size: usize, align: usize) -> *mut u8,
     pub abi_dealloc: extern "C" fn(data: AbiData, ptr: *mut u8, size: usize, align: usize),
     pub abi_open: extern "C" fn(data: AbiData, ptr: *const u8, len: usize) -> usize,
-    pub abi_pread: extern "C" fn(data: AbiData, fd: usize, ptr: *mut u8, len: usize, offset: usize) -> usize,
-    pub abi_pwrite: extern "C" fn(data: AbiData, fd: usize, ptr: *const u8, len: usize, offset: usize) -> usize,
+    pub abi_pread:
+        extern "C" fn(data: AbiData, fd: usize, ptr: *mut u8, len: usize, offset: usize) -> usize,
+    pub abi_pwrite:
+        extern "C" fn(data: AbiData, fd: usize, ptr: *const u8, len: usize, offset: usize) -> usize,
     pub abi_truncate: extern "C" fn(data: AbiData, fd: usize, size: usize) -> usize,
 }
 
@@ -64,7 +63,8 @@ impl Abi {
 
         //TODO: need this many unsafes?
         let mut args = Vec::new();
-        for arg_i in 0..4096 { // TODO: is this a good limit?
+        for arg_i in 0..4096 {
+            // TODO: is this a good limit?
             let (ptr, len) = unsafe { *self.abi_args.add(arg_i) };
             if ptr.is_null() {
                 break;
@@ -116,17 +116,19 @@ impl Abi {
             print!(" \x08");
 
             match key {
-                '\x08' | '\x7F' => if ! line.is_empty() {
-                    print!("\x08 \x08");
-                    line.pop();
-                },
-                '\n' | '\r'=> {
+                '\x08' | '\x7F' => {
+                    if !line.is_empty() {
+                        print!("\x08 \x08");
+                        line.pop();
+                    }
+                }
+                '\n' | '\r' => {
                     break;
-                },
+                }
                 _ => {
                     print!("{}", key);
                     line.push(key)
-                },
+                }
             }
         }
         line
@@ -145,7 +147,13 @@ impl Abi {
     }
 
     pub fn pread(&self, fd: usize, buf: &mut [u8], offset: usize) -> Result<usize> {
-        Error::demux((self.abi_pread)(self.abi_data, fd, buf.as_mut_ptr(), buf.len(), offset))
+        Error::demux((self.abi_pread)(
+            self.abi_data,
+            fd,
+            buf.as_mut_ptr(),
+            buf.len(),
+            offset,
+        ))
     }
 
     #[cfg(feature = "alloc")]
@@ -166,7 +174,7 @@ impl Abi {
             if count == 0 {
                 // End of file
                 data.truncate(offset);
-                return Ok(data)
+                return Ok(data);
             }
 
             // Adjust offset for next block
@@ -181,7 +189,13 @@ impl Abi {
     }
 
     pub fn pwrite(&self, fd: usize, buf: &[u8], offset: usize) -> Result<usize> {
-        Error::demux((self.abi_pwrite)(self.abi_data, fd, buf.as_ptr(), buf.len(), offset))
+        Error::demux((self.abi_pwrite)(
+            self.abi_data,
+            fd,
+            buf.as_ptr(),
+            buf.len(),
+            offset,
+        ))
     }
 
     pub fn truncate(&self, fd: usize, size: usize) -> Result<usize> {
