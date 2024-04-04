@@ -41,8 +41,11 @@ struct Logger;
 
 impl Logger {
     fn init(&'static self) {
-        log::set_logger(self).unwrap();
-        log::set_max_level(LevelFilter::Debug);
+        // We use the unsafe variants as i386 has no atomics
+        unsafe {
+            log::set_logger_racy(self).unwrap();
+            log::set_max_level_racy(LevelFilter::Debug);
+        }
     }
 }
 
