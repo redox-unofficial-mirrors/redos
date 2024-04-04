@@ -18,7 +18,7 @@ include mk/$(TARGET).mk
 clean:
 	rm -rf build target
 
-$(BUILD)/filesystem: redos/autoexec redos/*.rhai redos/*.txt $(REDOS_BINS)
+$(BUILD)/filesystem: redos/autoexec redos/*.raw redos/*.rhai redos/*.txt $(REDOS_BINS)
 	mkdir -p $(BUILD)
 	rm -rf $@.partial $@
 	mkdir $@.partial
@@ -30,6 +30,6 @@ $(BUILD)/filesystem: redos/autoexec redos/*.rhai redos/*.txt $(REDOS_BINS)
 $(BUILD)/filesystem.bin: $(BUILD)/filesystem
 	mkdir -p $(BUILD)
 	rm -f $@.partial
-	fallocate -l 8MiB $@.partial
+	fallocate -l 64MiB $@.partial
 	redoxfs-ar $@.partial $<
 	mv $@.partial $@
