@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(alloc_error_handler)]
 #![feature(associated_type_defaults)]
 #![feature(lang_items)]
 #![cfg_attr(
