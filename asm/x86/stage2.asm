@@ -2,9 +2,6 @@ SECTION .text
 USE16
 
 stage2.entry:
-    ; check for required features
-    call cpuid_check
-
     ; enable A20-Line via IO-Port 92, might not work on all motherboards
     in al, 0x92
     or al, 2
@@ -13,7 +10,6 @@ stage2.entry:
     mov dword [protected_mode.func], stage3.entry
     jmp protected_mode.entry
 
-%include "cpuid.asm"
 %include "gdt.asm"
 %include "long_mode.asm"
 %include "protected_mode.asm"
@@ -104,7 +100,7 @@ kernel:
     ; Bit 31: Paging, Bit 16: write protect kernel, Bit 0: Protected Mode
     or eax, 1 << 31 | 1 << 16 | 1
     mov cr0, eax
-    
+
     ; enable FPU
     ;TODO: move to Rust
     mov eax, cr0
