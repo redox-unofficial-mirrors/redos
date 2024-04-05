@@ -18,7 +18,7 @@ include mk/$(TARGET).mk
 clean:
 	rm -rf build target
 
-$(BUILD)/filesystem: redos/autoexec redos/*.raw redos/*.rhai redos/*.txt $(REDOS_BINS)
+$(BUILD)/filesystem: redos/autoexec redos/*.rhai redos/*.txt $(REDOS_BINS)
 	mkdir -p $(BUILD)
 	rm -rf $@.partial $@
 	mkdir $@.partial
